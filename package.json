@@ -1,0 +1,38 @@
+{
+  "name": "hyperthink-whatsapp",
+  "version": "1.0.0",
+  "description": "WhatsApp Campaign Automation",
+  "scripts": {
+    "dev": "concurrently -n db,api,web -c blue,green,magenta \"node scripts/start-local-db.js\" \"nodemon server/index.js\" \"cd client && npm run dev\"",
+    "dev:app": "concurrently -n api,web -c green,magenta \"nodemon server/index.js\" \"cd client && npm run dev\"",
+    "db:start": "node scripts/start-local-db.js",
+    "build": "cd client && npm run build",
+    "start": "NODE_ENV=production node server/index.js",
+    "install:all": "npm install && cd client && npm install",
+    "test": "node --test tests/*.test.js",
+    "docker:build": "docker build -t ${DOCKER_IMAGE:-hyperthink/whatsapp-app:latest} .",
+    "docker:push": "docker push ${DOCKER_IMAGE:-hyperthink/whatsapp-app:latest}",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.0",
+    "express": "^4.18.0",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "nodemon": "^3.1.14"
+  }
+}

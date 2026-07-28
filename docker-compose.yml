@@ -1,0 +1,63 @@
+# Production (on-prem):  docker compose up -d
+# Local dev (DB only):    docker compose up postgres -d  &&  npm run dev
+# Build image:            docker compose build app
+# Push to Docker Hub:     docker compose push app
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hyperthink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whatsapp_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyperthink2025}
+      POSTGRES_DB: whatsapp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DOCKER_IMAGE:-hyperthink/whatsapp-app:latest}
+    container_name: hyperthink-whatsapp
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://whatsapp_user:${POSTGRES_PASSWORD:-hyperthink2025}@postgres:5432/whatsapp_db
+      DATABASE_SSL: "false"
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:'+(process.env.PORT||3001)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+
+volumes:
+  postgres_data:
+  uploads_data:
+  backups_data:

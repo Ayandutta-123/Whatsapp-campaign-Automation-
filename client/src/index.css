@@ -1,0 +1,271 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ht-navy: #0a0349;
+  --ht-navy-soft: #12105a;
+  --ht-accent: #ff6002;
+  --ht-accent-deep: #e85500;
+  --ht-page: #f0f2f7;
+  --ht-ink: #0f172a;
+  --ht-muted: #64748b;
+  --ht-card: #ffffff;
+  --ht-ring: rgba(255, 96, 2, 0.35);
+  --ht-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: var(--ht-ink);
+  background-color: var(--ht-page);
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(10, 3, 73, 0.08), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(255, 96, 2, 0.07), transparent 50%),
+    linear-gradient(180deg, #f7f8fc 0%, #eef1f7 100%);
+  background-attachment: fixed;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100vh;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Prevent iOS zoom on input focus */
+@media (max-width: 1023px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-stripes {
+  0% { background-position: 1rem 0; }
+  100% { background-position: 0 0; }
+}
+
+.progress-striped {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progress-stripes 1s linear infinite;
+}
+
+@keyframes ht-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ht-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@keyframes ht-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes ht-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 96, 2, 0.35); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 96, 2, 0); }
+}
+
+@keyframes ht-grid-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+.ht-animate-in {
+  animation: ht-fade-up 0.55s var(--ht-ease) both;
+}
+
+.ht-animate-in-delay-1 { animation-delay: 0.06s; }
+.ht-animate-in-delay-2 { animation-delay: 0.12s; }
+.ht-animate-in-delay-3 { animation-delay: 0.18s; }
+.ht-animate-in-delay-4 { animation-delay: 0.24s; }
+
+.ht-card {
+  background: var(--ht-card);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px rgba(10, 3, 73, 0.04);
+  transition:
+    transform 0.35s var(--ht-ease),
+    box-shadow 0.35s var(--ht-ease),
+    border-color 0.35s var(--ht-ease);
+}
+
+.ht-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    0 16px 40px rgba(10, 3, 73, 0.08);
+  border-color: rgba(255, 96, 2, 0.18);
+}
+
+.ht-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 0.25s var(--ht-ease),
+    box-shadow 0.25s var(--ht-ease),
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.ht-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.28) 45%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+
+.ht-btn:hover:not(:disabled)::after {
+  animation: ht-shimmer 0.75s var(--ht-ease);
+}
+
+.ht-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.ht-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+.ht-btn-primary {
+  background: linear-gradient(135deg, var(--ht-accent) 0%, var(--ht-accent-deep) 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(255, 96, 2, 0.28);
+}
+
+.ht-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 12px 28px rgba(255, 96, 2, 0.38);
+}
+
+.ht-btn-outline {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  color: #334155;
+  backdrop-filter: blur(8px);
+}
+
+.ht-btn-outline:hover:not(:disabled) {
+  border-color: rgba(255, 96, 2, 0.45);
+  color: var(--ht-accent-deep);
+  background: #fff;
+}
+
+.ht-btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.25);
+}
+
+.ht-nav-link {
+  position: relative;
+  transition: color 0.25s ease, background-color 0.25s ease, transform 0.25s var(--ht-ease);
+}
+
+.ht-nav-link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: var(--ht-accent);
+  transform: scaleY(0);
+  transition: transform 0.25s var(--ht-ease);
+}
+
+.ht-nav-link:hover {
+  transform: translateX(3px);
+}
+
+.ht-nav-link-active::before {
+  transform: scaleY(1);
+}
+
+.ht-login-stage {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 20%, rgba(255, 96, 2, 0.22), transparent 50%),
+    radial-gradient(ellipse 70% 50% at 85% 75%, rgba(59, 130, 246, 0.12), transparent 45%),
+    linear-gradient(145deg, #07022e 0%, #0a0349 45%, #140a6b 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.ht-login-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: ht-grid-drift 18s linear infinite;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  pointer-events: none;
+}
+
+.ht-input {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.ht-input:focus {
+  border-color: var(--ht-accent) !important;
+  box-shadow: 0 0 0 3px var(--ht-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
