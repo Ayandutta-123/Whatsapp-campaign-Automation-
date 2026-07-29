@@ -12,6 +12,7 @@ const { startScheduler } = require('./scheduler');
 const { resumeInterruptedCampaigns, seedSettingsFromEnv } = require('./whatsapp');
 const { ensureAdminCredentials } = require('./utils/password');
 const { assertSecureEnv } = require('./utils/security');
+const { resolveCorsOrigins, isOriginAllowed } = require('./utils/cors');
 const webhookRouter = require('./webhook');
 
 const authRoutes = require('./routes/auth');
@@ -198,9 +199,8 @@ async function initDB() {
   console.log('Database initialized');
 }
 
-const corsOrigins = [process.env.APP_PUBLIC_URL, process.env.BASE_URL]
-  .filter(Boolean)
-  .map((url) => url.trim().replace(/\/$/, ''));
+const corsOrigins = resolveCorsOrigins();
+const allowAnyOrigin = corsOrigins.includes('*');
 
 app.use(
   helmet({
@@ -214,7 +214,7 @@ app.use(
               styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
               fontSrc: ["'self'", 'https://fonts.gstatic.com'],
               imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-              connectSrc: ["'self'"],
+              connectSrc: allowAnyOrigin ? ["'self'", '*'] : ["'self'", ...corsOrigins],
               frameAncestors: ["'none'"],
             },
           }
@@ -226,12 +226,12 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (process.env.NODE_ENV !== 'production') return callback(null, true);
-      if (corsOrigins.length === 0) {
-        return callback(new Error('CORS not configured — set APP_PUBLIC_URL'));
-      }
-      callback(null, corsOrigins.includes(origin.replace(/\/$/, '')));
+      if (isOriginAllowed(origin, corsOrigins)) return callback(null, true);
+      console.warn(
+        `Blocked cross-origin request from ${origin}. ` +
+          'Add it to CORS_ORIGINS (comma-separated) in .env to allow it.'
+      );
+      callback(null, false);
     },
     credentials: true,
   })

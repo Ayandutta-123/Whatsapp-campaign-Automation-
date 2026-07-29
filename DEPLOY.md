@@ -60,6 +60,25 @@ Use the **same password** for `POSTGRES_PASSWORD` and in `DATABASE_URL`.
 
 `APP_PUBLIC_URL` must be the URL your team uses to open the app (needed for header images and Meta webhooks).
 
+### If the UI is served from a different domain than the API
+
+The default deploy serves the UI and the API from the same container and port, so
+the browser calls `/api` on its own origin and no CORS setup is needed.
+
+Only when a reverse proxy or separate host serves the UI on another domain, set both:
+
+```env
+# API allows this browser origin (comma-separated list, or * for any)
+CORS_ORIGINS=https://whatsapp-campaign-automation.app.knowerai.com
+
+# UI is built to call this API URL instead of its own origin
+VITE_API_BASE_URL=https://api.yourcompany.com
+```
+
+`VITE_API_BASE_URL` is baked in when the client is built, so **rebuild the image**
+after changing it (`docker compose build app`). `CORS_ORIGINS` is read at server
+start, so a restart is enough.
+
 Optional on-prem paths (defaults work with Docker volumes):
 
 ```bash
@@ -168,6 +187,23 @@ docker compose push app
 docker compose pull
 docker compose up -d
 ```
+
+---
+
+## Troubleshooting
+
+### `blocked by CORS policy` / requests going to `localhost:3001`
+
+The UI was built with a hardcoded API URL. Check the failing request in the browser
+Network tab:
+
+| Request URL | Cause | Fix |
+|---|---|---|
+| `http://localhost:3001/api/...` | Stale client build baked in a dev URL | Rebuild with `VITE_API_BASE_URL` empty: `docker compose build app --no-cache` |
+| Your API domain, but blocked | Origin not allowed by the API | Add the UI origin to `CORS_ORIGINS` in `.env`, then `docker compose up -d` |
+
+The UI and API are meant to share one origin — leaving `VITE_API_BASE_URL` empty is
+the correct setting for the standard deploy.
 
 ---
 

@@ -9,6 +9,10 @@ RUN npm ci
 # ── Stage 2: build React UI ──────────────────────────────────────────────────
 FROM node:20-alpine AS client-build
 WORKDIR /app/client
+# Empty = UI calls the API on its own origin (single-port deploy). Set only when the
+# UI is served from a different host than the API.
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 COPY --from=client-deps /app/client/node_modules ./node_modules
 COPY client/ ./
 RUN npm run build

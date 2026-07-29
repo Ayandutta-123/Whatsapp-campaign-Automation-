@@ -1,7 +1,9 @@
 import axios from 'axios';
+import { apiBaseUrl } from './appOrigin';
 
 // Relative /api paths — same origin in production; Vite dev server proxies to the backend.
-const api = axios.create({ baseURL: '' });
+// VITE_API_BASE_URL overrides this when the UI and API are on different hosts.
+const api = axios.create({ baseURL: apiBaseUrl });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');

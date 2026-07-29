@@ -60,6 +60,46 @@ describe('phone validation', () => {
   });
 });
 
+describe('cors origins', () => {
+  const { resolveCorsOrigins, isOriginAllowed } = require('../server/utils/cors');
+  const prod = { NODE_ENV: 'production' };
+
+  it('collects origins from CORS_ORIGINS, APP_PUBLIC_URL and BASE_URL', () => {
+    const origins = resolveCorsOrigins({
+      CORS_ORIGINS: 'https://ui.example.com, https://staging.example.com/',
+      APP_PUBLIC_URL: 'https://app.example.com/',
+      BASE_URL: '',
+    });
+    assert.deepStrictEqual(origins, [
+      'https://ui.example.com',
+      'https://staging.example.com',
+      'https://app.example.com',
+    ]);
+  });
+
+  it('allows configured origins and blocks others in production', () => {
+    const origins = resolveCorsOrigins({ CORS_ORIGINS: 'https://ui.example.com' });
+    assert.strictEqual(isOriginAllowed('https://ui.example.com', origins, prod), true);
+    assert.strictEqual(isOriginAllowed('https://evil.example.com', origins, prod), false);
+  });
+
+  it('allows same-origin requests that send no Origin header', () => {
+    assert.strictEqual(isOriginAllowed(undefined, [], prod), true);
+  });
+
+  it('allows any origin when set to *', () => {
+    const origins = resolveCorsOrigins({ CORS_ORIGINS: '*' });
+    assert.strictEqual(isOriginAllowed('https://anything.example.com', origins, prod), true);
+  });
+
+  it('does not restrict origins outside production', () => {
+    assert.strictEqual(
+      isOriginAllowed('http://localhost:5173', [], { NODE_ENV: 'development' }),
+      true
+    );
+  });
+});
+
 describe('sender prefix matching', () => {
   it('matches longest country prefix first', () => {
     const senders = [
