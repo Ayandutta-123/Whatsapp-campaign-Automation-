@@ -310,6 +310,38 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+async function checkMetaConnectivity() {
+  const https = require('https');
+  await new Promise((resolve) => {
+    const req = https.request(
+      { hostname: 'graph.facebook.com', port: 443, path: '/', method: 'HEAD', timeout: 5000 },
+      (res) => {
+        console.log(`Meta Graph API reachable (graph.facebook.com responded ${res.statusCode})`);
+        res.resume();
+        resolve();
+      }
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      console.warn(
+        '⚠️  Meta Graph API check timed out reaching graph.facebook.com. ' +
+          'WhatsApp sends will fail until outbound network access to Meta is available. ' +
+          'If this host is running behind a firewall/proxy/VPN or a sandboxed shell, allow HTTPS to graph.facebook.com:443.'
+      );
+      resolve();
+    });
+    req.on('error', (err) => {
+      console.warn(
+        `⚠️  Meta Graph API unreachable (graph.facebook.com): ${err.message}. ` +
+          'WhatsApp sends will fail until outbound network access to Meta is available. ' +
+          'If this host is running behind a firewall/proxy/VPN or a sandboxed shell, allow HTTPS to graph.facebook.com:443.'
+      );
+      resolve();
+    });
+    req.end();
+  });
+}
+
 async function start() {
   try {
     await initDB();
@@ -319,6 +351,7 @@ async function start() {
     }
     startScheduler();
     await resumeInterruptedCampaigns();
+    checkMetaConnectivity().catch(() => {});
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

@@ -11,6 +11,8 @@ import { getWebhookUrl } from '../lib/appOrigin';
 
 export default function SettingsPage() {
   const [data, setData] = useState({});
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [showToken, setShowToken] = useState(false);
   const [tokenValue, setTokenValue] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
@@ -41,7 +43,8 @@ export default function SettingsPage() {
     confirm: '',
   });
 
-  const loadSettings = async () => {
+  const loadSettings = async ({ silent = false } = {}) => {
+    if (!silent) setLoadingSettings(true);
     try {
       const res = await settings.get();
       setData(res.data);
@@ -57,8 +60,23 @@ export default function SettingsPage() {
       setSendDelay(parseInt(res.data.send_delay_ms, 10) || 1000);
       setDailyLimit(parseInt(res.data.daily_send_limit, 10) || 1000);
       setTokenValue('');
-    } catch {
-      toast.error('Failed to load settings');
+      setLoadError(null);
+    } catch (err) {
+      const status = err.response?.status;
+      const apiMsg = err.response?.data?.error;
+      let msg = apiMsg || err.message || 'Failed to load settings';
+      if (status === 429) {
+        msg =
+          'Too many requests — wait a few seconds and tap Retry. (This is temporary rate limiting, not missing data.)';
+      } else if (status === 401) {
+        msg = 'Session expired — please sign in again.';
+      } else if (!err.response) {
+        msg = 'Cannot reach the API server. Check that the backend is running.';
+      }
+      setLoadError(msg);
+      if (!silent) toast.error(msg);
+    } finally {
+      setLoadingSettings(false);
     }
   };
 
@@ -77,9 +95,9 @@ export default function SettingsPage() {
     try {
       await settings.update(key, String(value));
       toast.success(`${label || key} saved`);
-      loadSettings();
-    } catch {
-      toast.error('Failed to save');
+      await loadSettings({ silent: true });
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save');
     } finally {
       setSaving('');
     }
@@ -106,9 +124,9 @@ export default function SettingsPage() {
       }
       await Promise.all(updates);
       toast.success('WhatsApp API settings saved');
-      await loadSettings();
-    } catch {
-      toast.error('Failed to save');
+      await loadSettings({ silent: true });
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save');
     } finally {
       setSaving('');
     }
@@ -243,6 +261,24 @@ export default function SettingsPage() {
       <TopBar title="Settings" />
 
       <div className="space-y-6 max-w-3xl">
+        {loadError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-red-800">{loadError}</p>
+            <LoadingButton
+              variant="outline"
+              loading={loadingSettings}
+              onClick={() => {
+                loadSettings();
+                refreshSenders();
+              }}
+            >
+              Retry
+            </LoadingButton>
+          </div>
+        )}
+        {loadingSettings && !loadError && Object.keys(data).length === 0 && (
+          <p className="text-sm text-gray-500">Loading settings…</p>
+        )}
         <section className="bg-white rounded-xl border shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4">WhatsApp API</h2>
           <div className="space-y-4">

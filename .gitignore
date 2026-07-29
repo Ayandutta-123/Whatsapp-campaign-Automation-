@@ -1,10 +1,66 @@
+# Dependencies
 node_modules/
+client/node_modules/
+
+# Build / output
 dist/
 client/dist/
+build/
+coverage/
+.turbo/
+.next/
+out/
+
+# Environment & secrets
 .env
+.env.*
+!.env.example
 client/.env
-.DS_Store
-*.log
+client/.env.*
+
+# Python virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Local DB / runtime data
+.pgdata/
 backups/
 uploads/
-.pgdata/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs & temp
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cursor local (keep rules if you add them later under .cursor/rules intentionally)
+.cursor/
+
+# Test / debug artifacts
+*.pem
+*.key
+*.crt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

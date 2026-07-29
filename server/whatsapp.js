@@ -94,12 +94,27 @@ async function sendWhatsAppMessage(phone, templateName, languageCode, components
       phoneNumberId: numberId,
     };
   } catch (err) {
+    const status = err.response?.status;
     const meta = err.response?.data?.error;
-    const raw =
-      meta?.message ||
-      err.message ||
-      'Unknown error';
-    const withCode = meta?.code ? `${raw} [code ${meta.code}]` : raw;
+    let raw = meta?.message || err.message || 'Unknown error';
+    if (!meta?.message && err.response?.data) {
+      // Meta returned a body we didn't recognize — surface it raw instead of
+      // silently falling back to axios's generic "Request failed with status code N".
+      try {
+        const bodyStr = JSON.stringify(err.response.data).slice(0, 500);
+        raw = `HTTP ${status}: ${bodyStr}`;
+      } catch {
+        /* keep raw as-is */
+      }
+    }
+    const details = [meta?.code && `code ${meta.code}`, meta?.error_subcode && `subcode ${meta.error_subcode}`]
+      .filter(Boolean)
+      .join(', ');
+    const withCode = details ? `${raw} [${details}]` : raw;
+    console.error(
+      `WhatsApp send failed (phoneNumberId=${numberId}, status=${status ?? 'n/a'}):`,
+      err.response?.data ? JSON.stringify(err.response.data) : err.message
+    );
     return {
       success: false,
       error: enrichMetaSendError(withCode, numberId),
