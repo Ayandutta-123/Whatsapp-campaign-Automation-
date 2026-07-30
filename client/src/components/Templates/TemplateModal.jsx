@@ -133,8 +133,8 @@ export default function TemplateModal({
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please upload an image file (PNG, JPG)');
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      toast.error('WhatsApp headers accept PNG or JPG only');
       return;
     }
     setUploading(true);
@@ -188,8 +188,15 @@ export default function TemplateModal({
 
     setLoading(true);
     try {
+      const cleanedButtons = (form.buttons || []).filter((btn) => {
+        if (!btn?.text?.trim()) return false;
+        if (btn.type === 'URL') return Boolean(btn.url?.trim());
+        if (btn.type === 'PHONE_NUMBER') return Boolean(btn.phone?.trim());
+        return true;
+      });
       await templates.update(template.id, {
         ...form,
+        buttons: cleanedButtons,
         whatsapp_template_name: form.whatsapp_template_name || toTemplateName(form.name),
         variables: detectVariables(form.body_text),
       });
@@ -223,8 +230,15 @@ export default function TemplateModal({
 
     setLoading(true);
     try {
+      const cleanedButtons = (form.buttons || []).filter((btn) => {
+        if (!btn?.text?.trim()) return false;
+        if (btn.type === 'URL') return Boolean(btn.url?.trim());
+        if (btn.type === 'PHONE_NUMBER') return Boolean(btn.phone?.trim());
+        return true;
+      });
       const data = {
         ...form,
+        buttons: cleanedButtons,
         whatsapp_template_name: form.whatsapp_template_name || toTemplateName(form.name),
         variables: detectVariables(form.body_text),
       };
@@ -407,7 +421,7 @@ export default function TemplateModal({
                   <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
                     <Upload size={16} />
                     {uploading ? 'Uploading...' : 'Upload Logo / Image'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+                    <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleImageUpload} disabled={uploading} />
                   </label>
                   <p className="text-xs text-gray-400 mt-2">PNG or JPG, max 5MB</p>
                 </div>
@@ -444,9 +458,13 @@ export default function TemplateModal({
                       <select
                         value={btn.type}
                         onChange={(e) => {
-                          const updated = [...form.buttons];
-                          updated[idx] = { ...updated[idx], type: e.target.value };
-                          setForm((f) => ({ ...f, buttons: updated }));
+                          const type = e.target.value;
+                          setForm((f) => ({
+                            ...f,
+                            buttons: f.buttons.map((b, i) =>
+                              i === idx ? { ...b, type } : b
+                            ),
+                          }));
                         }}
                         className="text-xs border rounded px-2 py-1 bg-white"
                       >
@@ -457,8 +475,10 @@ export default function TemplateModal({
                       <button
                         type="button"
                         onClick={() => {
-                          const updated = form.buttons.filter((_, i) => i !== idx);
-                          setForm((f) => ({ ...f, buttons: updated }));
+                          setForm((f) => ({
+                            ...f,
+                            buttons: f.buttons.filter((_, i) => i !== idx),
+                          }));
                         }}
                         className="ml-auto text-red-400 hover:text-red-600"
                       >
@@ -470,9 +490,13 @@ export default function TemplateModal({
                       value={btn.text}
                       maxLength={25}
                       onChange={(e) => {
-                        const updated = [...form.buttons];
-                        updated[idx] = { ...updated[idx], text: e.target.value };
-                        setForm((f) => ({ ...f, buttons: updated }));
+                        const text = e.target.value;
+                        setForm((f) => ({
+                          ...f,
+                          buttons: f.buttons.map((b, i) =>
+                            i === idx ? { ...b, text } : b
+                          ),
+                        }));
                       }}
                       className="w-full px-2 py-1 border rounded text-xs"
                     />
@@ -481,9 +505,13 @@ export default function TemplateModal({
                         placeholder="URL (e.g. https://yourbrand.com/offer)"
                         value={btn.url}
                         onChange={(e) => {
-                          const updated = [...form.buttons];
-                          updated[idx] = { ...updated[idx], url: e.target.value };
-                          setForm((f) => ({ ...f, buttons: updated }));
+                          const url = e.target.value;
+                          setForm((f) => ({
+                            ...f,
+                            buttons: f.buttons.map((b, i) =>
+                              i === idx ? { ...b, url } : b
+                            ),
+                          }));
                         }}
                         className="w-full px-2 py-1 border rounded text-xs"
                       />
@@ -493,9 +521,13 @@ export default function TemplateModal({
                         placeholder="Phone with country code (e.g. +919876543210)"
                         value={btn.phone}
                         onChange={(e) => {
-                          const updated = [...form.buttons];
-                          updated[idx] = { ...updated[idx], phone: e.target.value };
-                          setForm((f) => ({ ...f, buttons: updated }));
+                          const phone = e.target.value;
+                          setForm((f) => ({
+                            ...f,
+                            buttons: f.buttons.map((b, i) =>
+                              i === idx ? { ...b, phone } : b
+                            ),
+                          }));
                         }}
                         className="w-full px-2 py-1 border rounded text-xs"
                       />

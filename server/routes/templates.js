@@ -19,14 +19,35 @@ const { uploadLimiter } = require('../middleware/rateLimit');
 const { publicError } = require('../utils/security');
 
 const router = express.Router();
+
+// WhatsApp template headers only accept JPEG and PNG, and the stored extension is
+// what later tells Meta the media type — so anything else must be rejected here.
+const HEADER_IMAGE_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only image files are allowed'));
+    if (HEADER_IMAGE_TYPES.has(file.mimetype)) cb(null, true);
+    else cb(new Error('Only PNG or JPG images are allowed'));
   },
 });
+
+/** Translates multer rejections into JSON the UI can display. */
+function receiveHeaderImage(req, res, next) {
+  upload.single('image')(req, res, (err) => {
+    if (!err) return next();
+    res.status(400).json({
+      error:
+        err.code === 'LIMIT_FILE_SIZE'
+          ? 'Image is larger than 5MB. Upload a smaller PNG or JPG.'
+          : err.message || 'Image upload failed',
+    });
+  });
+}
 
 function detectVariables(bodyText) {
   if (!bodyText) return [];
@@ -111,13 +132,13 @@ router.get('/meta/list', async (req, res) => {
   }
 });
 
-router.post('/upload-header', uploadLimiter, upload.single('image'), async (req, res) => {
+router.post('/upload-header', uploadLimiter, receiveHeaderImage, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required' });
     }
 
-    const ext = req.file.mimetype === 'image/png' ? 'png' : 'jpg';
+    const ext = HEADER_IMAGE_TYPES.get(req.file.mimetype);
     const filename = `${crypto.randomUUID()}.${ext}`;
     const uploadDir = resolveHeadersDir();
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -154,9 +175,14 @@ router.post('/upload-header', uploadLimiter, upload.single('image'), async (req,
       meta_warning,
     });
   } catch (err) {
-    res.status(500).json({
-      error: err.response?.data?.error?.message || err.message,
-    });
+    console.error('Header image upload failed:', err.message);
+    if (err.code === 'EACCES' || err.code === 'EPERM') {
+      return res.status(500).json({
+        error:
+          'Server cannot write to the uploads folder. Check that the uploads volume is writable by the app user, then try again.',
+      });
+    }
+    res.status(500).json({ error: publicError(err, 'Image upload failed') });
   }
 });
 
@@ -462,7 +488,14 @@ router.patch('/:id', async (req, res) => {
         if (field === 'variables' && !value && req.body.body_text) {
           value = detectVariables(req.body.body_text);
         }
-        updates.push(`${field} = $${paramIdx}`);
+        // buttons is jsonb: pg would otherwise send a JS array as a Postgres
+        // array literal, which fails to cast to json.
+        if (field === 'buttons') {
+          value = JSON.stringify(Array.isArray(value) ? value : []);
+          updates.push(`${field} = $${paramIdx}::jsonb`);
+        } else {
+          updates.push(`${field} = $${paramIdx}`);
+        }
         values.push(value);
         paramIdx++;
       }
