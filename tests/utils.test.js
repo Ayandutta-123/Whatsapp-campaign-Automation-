@@ -100,6 +100,30 @@ describe('cors origins', () => {
   });
 });
 
+describe('runtime env normalization', () => {
+  const { normalizeRuntimeEnv } = require('../server/utils/security');
+  const fs = require('fs');
+
+  it('forces production when /.dockerenv exists and NODE_ENV is development', () => {
+    const original = process.env.NODE_ENV;
+    const allow = process.env.ALLOW_DEV_IN_DOCKER;
+    process.env.NODE_ENV = 'development';
+    delete process.env.ALLOW_DEV_IN_DOCKER;
+
+    const existsSync = fs.existsSync;
+    fs.existsSync = (p) => (p === '/.dockerenv' ? true : existsSync(p));
+    try {
+      normalizeRuntimeEnv();
+      assert.strictEqual(process.env.NODE_ENV, 'production');
+    } finally {
+      fs.existsSync = existsSync;
+      process.env.NODE_ENV = original;
+      if (allow === undefined) delete process.env.ALLOW_DEV_IN_DOCKER;
+      else process.env.ALLOW_DEV_IN_DOCKER = allow;
+    }
+  });
+});
+
 describe('sender prefix matching', () => {
   it('matches longest country prefix first', () => {
     const senders = [

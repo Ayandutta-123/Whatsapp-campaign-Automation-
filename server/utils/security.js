@@ -30,6 +30,23 @@ const ALLOWED_SETTING_KEYS = new Set([
   'anthropic_api_key',
 ]);
 
+function normalizeRuntimeEnv() {
+  // Docker / on-prem containers should always run as production, even if someone
+  // copied a local .env that still says NODE_ENV=development.
+  const inDocker = require('fs').existsSync('/.dockerenv');
+  if (!inDocker) return;
+
+  if (process.env.ALLOW_DEV_IN_DOCKER === 'true') return;
+
+  const current = (process.env.NODE_ENV || '').trim();
+  if (current !== 'production') {
+    console.warn(
+      `[runtime] NODE_ENV was "${current || '(empty)'}" — forcing production inside Docker/on-prem`
+    );
+    process.env.NODE_ENV = 'production';
+  }
+}
+
 function assertSecureEnv() {
   const secret = process.env.JWT_SECRET || '';
   const isProd = process.env.NODE_ENV === 'production';
@@ -92,6 +109,7 @@ function publicError(err, fallback = 'Something went wrong') {
 }
 
 module.exports = {
+  normalizeRuntimeEnv,
   assertSecureEnv,
   isSettingKeyAllowed,
   safeResolveUnder,

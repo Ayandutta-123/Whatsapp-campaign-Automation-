@@ -56,6 +56,8 @@ ADMIN_PASSWORD=YourSecurePassword
 APP_PUBLIC_URL=https://whatsapp.yourcompany.com
 ```
 
+`NODE_ENV` is forced to `production` inside Docker even if a copied `.env` still says `development`. Local `npm run dev` on a Mac can keep `NODE_ENV=development`.
+
 Use the **same password** for `POSTGRES_PASSWORD` and in `DATABASE_URL`.
 
 `APP_PUBLIC_URL` must be the URL your team uses to open the app (needed for header images and Meta webhooks).

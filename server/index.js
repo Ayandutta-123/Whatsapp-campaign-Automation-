@@ -1,4 +1,8 @@
 require('dotenv').config();
+const { assertSecureEnv, normalizeRuntimeEnv } = require('./utils/security');
+normalizeRuntimeEnv();
+assertSecureEnv();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,7 +15,6 @@ const { apiLimiter, authLimiter } = require('./middleware/rateLimit');
 const { startScheduler } = require('./scheduler');
 const { resumeInterruptedCampaigns, seedSettingsFromEnv } = require('./whatsapp');
 const { ensureAdminCredentials } = require('./utils/password');
-const { assertSecureEnv } = require('./utils/security');
 const { resolveCorsOrigins, isOriginAllowed } = require('./utils/cors');
 const webhookRouter = require('./webhook');
 
@@ -25,8 +28,6 @@ const sendersRoutes = require('./routes/senders');
 const aiRoutes = require('./routes/ai');
 const notificationsRoutes = require('./routes/notifications');
 const { repairInvalidSenderPhoneNumberIds } = require('./utils/senders');
-
-assertSecureEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
