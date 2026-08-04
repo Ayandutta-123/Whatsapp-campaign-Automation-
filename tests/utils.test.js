@@ -124,6 +124,56 @@ describe('runtime env normalization', () => {
   });
 });
 
+describe('template image URL for sends', () => {
+  const { getPublicImageUrl, buildComponents } = require('../server/whatsapp');
+
+  it('prefers current public base + path over stale localhost header_image_url', () => {
+    const url = getPublicImageUrl({
+      header_type: 'image',
+      header_image_path: 'abc.png',
+      header_image_url: 'http://localhost:3001/uploads/headers/abc.png',
+      public_base_url: 'https://whatsapp.example.com',
+    });
+    assert.strictEqual(url, 'https://whatsapp.example.com/uploads/headers/abc.png');
+  });
+
+  it('rejects localhost-only image URLs', () => {
+    const url = getPublicImageUrl({
+      header_type: 'image',
+      header_image_url: 'http://127.0.0.1:3001/uploads/headers/abc.png',
+      public_base_url: '',
+    });
+    assert.strictEqual(url, null);
+  });
+
+  it('includes header image link in components when URL is usable', () => {
+    const components = buildComponents({}, { name: 'A' }, {
+      header_type: 'image',
+      header_image_path: 'abc.png',
+      public_base_url: 'https://whatsapp.example.com',
+    });
+    assert.deepStrictEqual(components[0], {
+      type: 'header',
+      parameters: [
+        {
+          type: 'image',
+          image: { link: 'https://whatsapp.example.com/uploads/headers/abc.png' },
+        },
+      ],
+    });
+  });
+
+  it('uses provided media-id header parameter when supplied', () => {
+    const components = buildComponents(
+      {},
+      { name: 'A' },
+      { header_type: 'image' },
+      { type: 'image', image: { id: 'media-123' } }
+    );
+    assert.deepStrictEqual(components[0].parameters[0].image, { id: 'media-123' });
+  });
+});
+
 describe('sender prefix matching', () => {
   it('matches longest country prefix first', () => {
     const senders = [

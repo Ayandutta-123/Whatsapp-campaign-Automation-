@@ -6,18 +6,22 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: hyperthink-postgres
+    container_name: ${POSTGRES_CONTAINER_NAME:-hyperthink-postgres}
     restart: unless-stopped
     environment:
-      POSTGRES_USER: whatsapp_user
+      POSTGRES_USER: ${POSTGRES_USER:-whatsapp_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyperthink2025}
-      POSTGRES_DB: whatsapp_db
+      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d whatsapp_db"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-whatsapp_user} -d ${POSTGRES_DB:-whatsapp_db}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,17 +34,21 @@ services:
         # Leave empty for the standard single-port deploy (UI and API same origin).
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     image: ${DOCKER_IMAGE:-hyperthink/whatsapp-app:latest}
-    container_name: hyperthink-whatsapp
+    container_name: ${APP_CONTAINER_NAME:-hyperthink-whatsapp}
     restart: unless-stopped
     ports:
-      - "${PORT:-3001}:3001"
+      # Prefer PORT_whatsapp_automation (on-prem host port), else PORT, else 3001
+      - "${PORT_whatsapp_automation:-${PORT:-3001}}:3001"
     env_file:
       - .env
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgresql://whatsapp_user:${POSTGRES_PASSWORD:-hyperthink2025}@postgres:5432/whatsapp_db
-      DATABASE_SSL: "false"
+      # Honours DATABASE_URL from .env (e.g. host whatsapp_postgres). Fallback for default compose.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://whatsapp_user:${POSTGRES_PASSWORD:-hyperthink2025}@postgres:5432/whatsapp_db}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      BASE_URL: ${BASE_URL:-}
     volumes:
       - uploads_data:/app/uploads
       - backups_data:/app/backups

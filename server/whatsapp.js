@@ -1,12 +1,15 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const pool = require('./db');
 const { resolvePhoneNumberId } = require('./utils/senders');
 const { canSendMore } = require('./utils/limits');
 const { sanitizePhoneNumberId, enrichMetaSendError } = require('./utils/phoneNumberId');
 const { pushNotification } = require('./utils/notifications');
+const { safeResolveUnder } = require('./utils/security');
 
 const { resolvePublicBaseUrl } = require('./utils/publicUrl');
-const { graphApiBase } = require('./utils/paths');
+const { graphApiBase, resolveHeadersDir } = require('./utils/paths');
 
 const ENV_SETTING_KEYS = {
   whatsapp_token: 'WHATSAPP_TOKEN',
@@ -98,8 +101,6 @@ async function sendWhatsAppMessage(phone, templateName, languageCode, components
     const meta = err.response?.data?.error;
     let raw = meta?.message || err.message || 'Unknown error';
     if (!meta?.message && err.response?.data) {
-      // Meta returned a body we didn't recognize — surface it raw instead of
-      // silently falling back to axios's generic "Request failed with status code N".
       try {
         const bodyStr = JSON.stringify(err.response.data).slice(0, 500);
         raw = `HTTP ${status}: ${bodyStr}`;
@@ -123,31 +124,137 @@ async function sendWhatsAppMessage(phone, templateName, languageCode, components
   }
 }
 
+function isUnusableImageUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Prefer current Public App URL + filename over a stale header_image_url
+ * (e.g. http://localhost:3001/... from an old upload). Meta cannot fetch localhost.
+ */
 function getPublicImageUrl(template) {
-  if (template?.header_image_url?.startsWith('http')) {
-    return template.header_image_url;
+  const base = String(template?.public_base_url || '')
+    .trim()
+    .replace(/\/+$/, '');
+  const fileName = template?.header_image_path
+    ? path.basename(String(template.header_image_path))
+    : '';
+
+  if (base && fileName) {
+    const built = `${base}/uploads/headers/${fileName}`;
+    if (!isUnusableImageUrl(built)) return built;
   }
-  const base = template?.public_base_url;
-  if (base && template?.header_image_path) {
-    return `${base.replace(/\/$/, '')}/uploads/headers/${template.header_image_path}`;
+
+  const stored = template?.header_image_url;
+  if (stored?.startsWith('http') && !isUnusableImageUrl(stored)) {
+    return stored;
   }
+
   return null;
 }
 
-function buildComponents(variableMapping, contact, template) {
-  const components = [];
+function readHeaderImageFile(headerImagePath) {
+  const filePath = safeResolveUnder(resolveHeadersDir(), headerImagePath);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Header image file missing on server: ${path.basename(filePath)}`);
+  }
+  const buffer = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+  return { buffer, mime, fileName: path.basename(filePath) };
+}
+
+/**
+ * Upload header bytes to WhatsApp Cloud API media storage.
+ * Sending image.id is more reliable than image.link.
+ */
+async function uploadWhatsAppMedia(buffer, mimeType, fileName, phoneNumberId, token) {
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mimeType);
+  form.append('file', new Blob([buffer], { type: mimeType }), fileName);
+
+  const response = await axios.post(
+    `${graphApiBase()}/${phoneNumberId}/media`,
+    form,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    }
+  );
+
+  const mediaId = response.data?.id;
+  if (!mediaId) {
+    throw new Error('Meta media upload returned no media id');
+  }
+  return mediaId;
+}
+
+/**
+ * Build the header image parameter for an IMAGE template.
+ * Prefers media id from a fresh upload; falls back to a public HTTPS link.
+ */
+async function resolveHeaderImageParameter(template, phoneNumberId, token) {
+  if (template?.header_type !== 'image') return null;
+
+  if (template.header_image_path) {
+    try {
+      const { buffer, mime, fileName } = readHeaderImageFile(template.header_image_path);
+      const mediaId = await uploadWhatsAppMedia(
+        buffer,
+        mime,
+        fileName,
+        phoneNumberId,
+        token
+      );
+      return { type: 'image', image: { id: mediaId } };
+    } catch (err) {
+      console.warn(
+        `WhatsApp media upload failed for ${template.header_image_path}: ${err.message}. Falling back to public link.`
+      );
+    }
+  }
 
   const imageUrl = getPublicImageUrl(template);
-  if (template?.header_type === 'image' && imageUrl) {
+  if (imageUrl) {
+    return { type: 'image', image: { link: imageUrl } };
+  }
+
+  throw new Error(
+    'Image header template has no usable image for sending. Re-upload the logo/image on the template and ensure Public App URL is set.'
+  );
+}
+
+function buildComponents(variableMapping, contact, template, headerParameter = null) {
+  const components = [];
+
+  if (headerParameter) {
     components.push({
       type: 'header',
-      parameters: [
-        {
-          type: 'image',
-          image: { link: imageUrl },
-        },
-      ],
+      parameters: [headerParameter],
     });
+  } else if (template?.header_type === 'image') {
+    const imageUrl = getPublicImageUrl(template);
+    if (imageUrl) {
+      components.push({
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: { link: imageUrl },
+          },
+        ],
+      });
+    }
   }
 
   const fieldMap = {
@@ -213,6 +320,7 @@ async function sendCampaign(campaignId) {
     const publicBaseSetting = await getSetting('public_base_url');
     const publicBase = resolvePublicBaseUrl(publicBaseSetting, null);
     const templateWithBase = { ...template, public_base_url: publicBase };
+    const token = await getSetting('whatsapp_token');
 
     const delay = parseInt(await getSetting('send_delay_ms'), 10) || 1000;
     const variableMapping = campaign.variable_mapping || {};
@@ -255,7 +363,51 @@ async function sendCampaign(campaignId) {
       };
 
       const phoneNumberId = await resolvePhoneNumberId(contact.phone, campaign);
-      const components = buildComponents(variableMapping, contact, templateWithBase);
+
+      let headerParameter = null;
+      try {
+        headerParameter = await resolveHeaderImageParameter(
+          templateWithBase,
+          sanitizePhoneNumberId(phoneNumberId) ||
+            sanitizePhoneNumberId(await getSetting('phone_number_id')),
+          token
+        );
+      } catch (err) {
+        await pool.query(
+          `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
+          [err.message, log.id]
+        );
+        await pool.query(
+          'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
+          [campaignId]
+        );
+        continue;
+      }
+
+      if (
+        templateWithBase.header_type === 'image' &&
+        !headerParameter
+      ) {
+        await pool.query(
+          `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
+          [
+            'Image header template sent without an image parameter. Re-upload the logo and set Public App URL.',
+            log.id,
+          ]
+        );
+        await pool.query(
+          'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
+          [campaignId]
+        );
+        continue;
+      }
+
+      const components = buildComponents(
+        variableMapping,
+        contact,
+        templateWithBase,
+        headerParameter
+      );
       const result = await sendWhatsAppMessage(
         contact.phone,
         template.whatsapp_template_name,
@@ -361,4 +513,6 @@ module.exports = {
   seedSettingsFromEnv,
   buildComponents,
   getPublicImageUrl,
+  resolveHeaderImageParameter,
+  isUnusableImageUrl,
 };
