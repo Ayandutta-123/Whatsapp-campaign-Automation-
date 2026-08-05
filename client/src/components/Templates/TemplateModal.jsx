@@ -3,10 +3,21 @@ import { Upload, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from '../shared/Modal';
 import LoadingButton from '../shared/LoadingButton';
+import ConfirmDialog from '../shared/ConfirmDialog';
 import StatusBadge from '../shared/StatusBadge';
 import WhatsAppPreview from './WhatsAppPreview';
 import { templates } from '../../lib/api';
 import { isApprovedTemplate } from '../../lib/templateStatus';
+
+const META_RESUBMIT_WARNING = `Meta cannot update an approved template in place.
+
+Saving will submit a NEW version (e.g. your_template_v2) to Meta for re-approval.
+
+• You cannot use your edits in campaigns until the NEW version is APPROVED (usually 1–24 hours).
+• The old approved version stays on Meta — campaigns still use the old content until you switch to the new version after approval.
+• If you want a clean start with a different name, Cancel and create a new template instead.
+
+Continue to save and send this new version to Meta?`;
 
 const CATEGORIES = [
   { value: 'MARKETING', label: 'Marketing', desc: 'Promotions, offers, and announcements' },
@@ -78,7 +89,18 @@ export default function TemplateModal({
   const [uploading, setUploading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [metaStatus, setMetaStatus] = useState(null);
+  /** null | 'save' | 'resubmit' — shows version-warning before sending edits to Meta */
+  const [confirmResubmit, setConfirmResubmit] = useState(null);
   const isEdit = !!template?.id;
+
+  const needsMetaVersionWarning = () => {
+    const status = String(metaStatus || template?.meta_status || '').toLowerCase();
+    return (
+      Boolean(template?.meta_template_id) ||
+      ['pending', 'approved', 'rejected', 'paused'].includes(status) ||
+      isApprovedTemplate({ meta_status: metaStatus || template?.meta_status })
+    );
+  };
 
   useEffect(() => {
     if (template) {
@@ -104,6 +126,7 @@ export default function TemplateModal({
         submit_to_meta: false,
       });
       setMetaStatus(template.meta_status);
+      setConfirmResubmit(null);
     } else if (initialDraft) {
       setForm({
         ...emptyForm,
@@ -120,9 +143,11 @@ export default function TemplateModal({
         submit_to_meta: true,
       });
       setMetaStatus(null);
+      setConfirmResubmit(null);
     } else {
       setForm(emptyForm);
       setMetaStatus(null);
+      setConfirmResubmit(null);
     }
   }, [template, initialDraft, open]);
 
@@ -185,7 +210,15 @@ export default function TemplateModal({
       toast.error('Upload a logo/image for the header first');
       return;
     }
+    if (needsMetaVersionWarning()) {
+      setConfirmResubmit('resubmit');
+      return;
+    }
+    await performSubmitToMeta();
+  };
 
+  const performSubmitToMeta = async () => {
+    setConfirmResubmit(null);
     setLoading(true);
     try {
       const cleanedButtons = (form.buttons || []).filter((btn) => {
@@ -202,13 +235,19 @@ export default function TemplateModal({
       });
       const res = await templates.submitToMeta(template.id);
       setMetaStatus(res.data.template.meta_status);
-      if (res.data.template.header_media_handle) {
+      if (res.data.template.whatsapp_template_name) {
         setForm((f) => ({
           ...f,
-          header_media_handle: res.data.template.header_media_handle,
+          whatsapp_template_name: res.data.template.whatsapp_template_name,
+          header_media_handle:
+            res.data.template.header_media_handle || f.header_media_handle,
         }));
       }
-      toast.success('Submitted to Meta for approval');
+      if (res.data.renamed) {
+        toast.success(`Resubmitted to Meta as "${res.data.renamed}" (new version)`);
+      } else {
+        toast.success('Submitted to Meta for approval');
+      }
       onSaved();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Meta submission failed');
@@ -228,6 +267,16 @@ export default function TemplateModal({
       return;
     }
 
+    if (isEdit && needsMetaVersionWarning()) {
+      setConfirmResubmit('save');
+      return;
+    }
+
+    await performSave();
+  };
+
+  const performSave = async () => {
+    setConfirmResubmit(null);
     setLoading(true);
     try {
       const cleanedButtons = (form.buttons || []).filter((btn) => {
@@ -245,7 +294,20 @@ export default function TemplateModal({
 
       if (isEdit) {
         await templates.update(template.id, data);
-        toast.success('Template updated locally');
+        try {
+          const res = await templates.submitToMeta(template.id);
+          setMetaStatus(res.data.template.meta_status);
+          if (res.data.renamed) {
+            toast.success(`Saved and resubmitted to Meta as "${res.data.renamed}"`);
+          } else {
+            toast.success('Template saved and submitted to Meta for approval');
+          }
+        } catch (metaErr) {
+          toast.error(
+            metaErr.response?.data?.error ||
+              'Saved locally, but Meta resubmit failed. Use Submit to Meta to retry.'
+          );
+        }
       } else {
         const res = await templates.create(data);
         if (res.data.metaError) {
@@ -268,6 +330,7 @@ export default function TemplateModal({
   const vars = detectVariables(form.body_text);
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit Template' : 'Create Template'} wide>
       <form onSubmit={handleSubmit}>
         {isEdit && metaStatus && (
@@ -283,12 +346,20 @@ export default function TemplateModal({
               <LoadingButton variant="outline" onClick={handleSyncMeta} loading={syncing} type="button">
                 <RefreshCw size={14} /> Sync Status
               </LoadingButton>
-              {metaStatus && !isApprovedTemplate({ meta_status: metaStatus }) && (
-                <LoadingButton onClick={handleSubmitToMeta} loading={loading} type="button">
-                  Submit to Meta
-                </LoadingButton>
-              )}
+              <LoadingButton onClick={handleSubmitToMeta} loading={loading} type="button">
+                {isApprovedTemplate({ meta_status: metaStatus })
+                  ? 'Resubmit to Meta'
+                  : 'Submit to Meta'}
+              </LoadingButton>
             </div>
+          </div>
+        )}
+
+        {isEdit && needsMetaVersionWarning() && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+            <strong>Editing a Meta template:</strong> Meta will receive a <strong>new version</strong> for
+            re-approval. Your edits are not usable in campaigns until that new version is approved.
+            To keep the old approved content as-is, cancel and create a separate new template instead.
           </div>
         )}
 
@@ -550,10 +621,23 @@ export default function TemplateModal({
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 mt-6 pt-4 border-t">
           <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm text-gray-600 rounded-lg hover:bg-gray-50">Cancel</button>
           <LoadingButton type="submit" loading={loading} className="w-full sm:w-auto justify-center">
-            {isEdit ? 'Save Changes' : 'Save & Submit to Meta'}
+            {isEdit ? 'Save & Resubmit to Meta' : 'Save & Submit to Meta'}
           </LoadingButton>
         </div>
       </form>
     </Modal>
+
+      <ConfirmDialog
+        open={!!confirmResubmit}
+        onClose={() => setConfirmResubmit(null)}
+        onConfirm={() =>
+          confirmResubmit === 'resubmit' ? performSubmitToMeta() : performSave()
+        }
+        title="New Meta version required"
+        message={META_RESUBMIT_WARNING}
+        confirmText="Save & send new version to Meta"
+        loading={loading}
+      />
+    </>
   );
 }

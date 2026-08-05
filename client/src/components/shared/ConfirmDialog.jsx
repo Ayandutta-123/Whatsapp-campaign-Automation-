@@ -13,7 +13,9 @@ export default function ConfirmDialog({
 }) {
   return (
     <Modal open={open} onClose={onClose} title={title}>
-      <p className="text-gray-600 mb-6">{message}</p>
+      <div className="text-gray-600 mb-6 text-sm leading-relaxed whitespace-pre-line">
+        {message}
+      </div>
       <div className="flex justify-end gap-3">
         <button
           onClick={onClose}

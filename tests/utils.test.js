@@ -125,7 +125,12 @@ describe('runtime env normalization', () => {
 });
 
 describe('template image URL for sends', () => {
-  const { getPublicImageUrl, buildComponents } = require('../server/whatsapp');
+  const {
+    getPublicImageUrl,
+    buildComponents,
+    detectBodyVarKeys,
+    sanitizeTemplateParam,
+  } = require('../server/whatsapp');
 
   it('prefers current public base + path over stale localhost header_image_url', () => {
     const url = getPublicImageUrl({
@@ -171,6 +176,68 @@ describe('template image URL for sends', () => {
       { type: 'image', image: { id: 'media-123' } }
     );
     assert.deepStrictEqual(components[0].parameters[0].image, { id: 'media-123' });
+  });
+
+  it('omits image header when Meta template is TEXT (prevents #132018)', () => {
+    const components = buildComponents(
+      {},
+      { name: 'A' },
+      {
+        header_type: 'image',
+        header_image_path: 'abc.png',
+        public_base_url: 'https://whatsapp.example.com',
+        body_text: 'Hello {{1}}',
+      },
+      { type: 'image', image: { id: 'media-123' } },
+      { metaHeaderFormat: 'TEXT', bodyVarKeys: ['1'] }
+    );
+    assert.strictEqual(components.find((c) => c.type === 'header'), undefined);
+    assert.deepStrictEqual(components[0], {
+      type: 'body',
+      parameters: [{ type: 'text', text: 'A' }],
+    });
+  });
+
+  it('sends body params from body_text even when variable_mapping is empty', () => {
+    const components = buildComponents(
+      {},
+      { name: 'Ada', company: 'Acme' },
+      { header_type: 'none', body_text: 'Hi {{1}} from {{2}}' }
+    );
+    assert.deepStrictEqual(components[0], {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: 'Ada' },
+        { type: 'text', text: 'Acme' },
+      ],
+    });
+  });
+
+  it('sanitizes empty and newline body params', () => {
+    assert.strictEqual(sanitizeTemplateParam(''), '-');
+    assert.strictEqual(sanitizeTemplateParam('a\nb'), 'a b');
+    const components = buildComponents(
+      { '1': 'name' },
+      { name: '' },
+      { body_text: 'Hi {{1}}' }
+    );
+    assert.strictEqual(components[0].parameters[0].text, '-');
+  });
+
+  it('detects body var keys from template body', () => {
+    assert.deepStrictEqual(
+      detectBodyVarKeys({ body_text: 'A {{2}} and {{1}}' }),
+      ['1', '2']
+    );
+  });
+});
+
+describe('meta template name versioning', () => {
+  const { nextMetaTemplateName } = require('../server/meta');
+
+  it('appends _v2 then increments', () => {
+    assert.strictEqual(nextMetaTemplateName('promo_offer'), 'promo_offer_v2');
+    assert.strictEqual(nextMetaTemplateName('promo_offer_v2'), 'promo_offer_v3');
   });
 });
 

@@ -260,13 +260,16 @@ router.post('/', async (req, res) => {
         const metaResult = await createMetaTemplate(template);
         const updateRes = await pool.query(
           `UPDATE templates SET meta_status = $1, meta_template_id = $2,
-           header_media_handle = COALESCE($4, header_media_handle), updated_at = NOW()
+           header_media_handle = COALESCE($4, header_media_handle),
+           whatsapp_template_name = COALESCE($5, whatsapp_template_name),
+           updated_at = NOW()
            WHERE id = $3 RETURNING *`,
           [
             metaResult.metaStatus,
             metaResult.metaTemplateId,
             template.id,
             metaResult.headerMediaHandle,
+            metaResult.whatsappTemplateName || null,
           ]
         );
         template = updateRes.rows[0];
@@ -374,10 +377,20 @@ router.post('/:id/submit-meta', async (req, res) => {
       return res.status(400).json({ error: 'Upload a header image before submitting to Meta' });
     }
 
-    const metaResult = await createMetaTemplate(template);
+    // Meta cannot edit an existing template in place. Any prior submission needs a new name.
+    const status = String(template.meta_status || '').toLowerCase();
+    const forceNewVersion =
+      Boolean(template.meta_template_id) ||
+      ['pending', 'approved', 'rejected', 'paused', 'failed'].includes(status);
+
+    const metaResult = await createMetaTemplate(template, {
+      forceNewVersion,
+      forceReuploadHeader: forceNewVersion,
+    });
     const updateRes = await pool.query(
       `UPDATE templates SET meta_status = $1, meta_template_id = $2,
        header_media_handle = COALESCE($4, header_media_handle),
+       whatsapp_template_name = COALESCE($5, whatsapp_template_name),
        meta_rejection_reason = NULL, updated_at = NOW()
        WHERE id = $3 RETURNING *`,
       [
@@ -385,10 +398,18 @@ router.post('/:id/submit-meta', async (req, res) => {
         metaResult.metaTemplateId,
         template.id,
         metaResult.headerMediaHandle,
+        metaResult.whatsappTemplateName || null,
       ]
     );
 
-    res.json({ template: updateRes.rows[0] });
+    res.json({
+      template: updateRes.rows[0],
+      renamed:
+        metaResult.whatsappTemplateName &&
+        metaResult.whatsappTemplateName !== template.whatsapp_template_name
+          ? metaResult.whatsappTemplateName
+          : null,
+    });
   } catch (err) {
     const errorMsg = err.response?.data?.error?.message || err.message;
     await pool.query(

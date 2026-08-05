@@ -234,15 +234,79 @@ async function resolveHeaderImageParameter(template, phoneNumberId, token) {
   );
 }
 
-function buildComponents(variableMapping, contact, template, headerParameter = null) {
-  const components = [];
+/** Meta rejects empty strings and newlines in template parameter values (#132018). */
+function sanitizeTemplateParam(value) {
+  let text = String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!text) text = '-';
+  return text.slice(0, 1024);
+}
 
-  if (headerParameter) {
+function detectBodyVarKeys(template) {
+  const fromVars = Array.isArray(template?.variables)
+    ? template.variables.map(String)
+    : typeof template?.variables === 'string'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(template.variables);
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  const fromBody = [
+    ...new Set(
+      String(template?.body_text || '')
+        .match(/\{\{(\d+)\}\}/g)
+        ?.map((m) => m.replace(/[{}]/g, '')) || []
+    ),
+  ];
+  return [...new Set([...fromVars, ...fromBody])].sort(
+    (a, b) => parseInt(a, 10) - parseInt(b, 10)
+  );
+}
+
+/**
+ * Build send components aligned with the approved Meta template.
+ * options.metaHeaderFormat: 'IMAGE' | 'TEXT' | 'VIDEO' | … from Meta (avoids #132018)
+ * options.bodyVarKeys: ordered body {{n}} keys from Meta or local body
+ */
+function buildComponents(
+  variableMapping,
+  contact,
+  template,
+  headerParameter = null,
+  options = {}
+) {
+  const components = [];
+  const metaHeaderFormat = options.metaHeaderFormat
+    ? String(options.metaHeaderFormat).toUpperCase()
+    : null;
+  const bodyVarKeys =
+    Array.isArray(options.bodyVarKeys) && options.bodyVarKeys.length > 0
+      ? options.bodyVarKeys.map(String)
+      : detectBodyVarKeys(template);
+
+  const metaExpectsImage = metaHeaderFormat === 'IMAGE';
+  const metaForbidsImage =
+    metaHeaderFormat &&
+    ['TEXT', 'DOCUMENT', 'VIDEO', 'LOCATION', 'NONE'].includes(metaHeaderFormat);
+  const localWantsImage = template?.header_type === 'image';
+
+  if (headerParameter && (metaExpectsImage || (!metaHeaderFormat && localWantsImage))) {
     components.push({
       type: 'header',
       parameters: [headerParameter],
     });
-  } else if (template?.header_type === 'image') {
+  } else if (
+    !headerParameter &&
+    localWantsImage &&
+    !metaForbidsImage &&
+    (metaExpectsImage || !metaHeaderFormat)
+  ) {
     const imageUrl = getPublicImageUrl(template);
     if (imageUrl) {
       components.push({
@@ -264,25 +328,31 @@ function buildComponents(variableMapping, contact, template, headerParameter = n
     email: contact.email || '',
   };
 
-  if (variableMapping && Object.keys(variableMapping).length > 0) {
-    const keys = Object.keys(variableMapping)
-      .filter((k) => !k.endsWith('_custom'))
-      .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  const mapping = variableMapping && typeof variableMapping === 'object' ? variableMapping : {};
+  const keys =
+    bodyVarKeys.length > 0
+      ? bodyVarKeys
+      : Object.keys(mapping)
+          .filter((k) => !k.endsWith('_custom'))
+          .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
 
+  if (keys.length > 0) {
     const parameters = keys.map((key) => {
-      const mapping = variableMapping[key];
+      const mapped = mapping[key];
       let value = '';
-      if (mapping === 'custom') {
-        value = variableMapping[`${key}_custom`] || '';
+      if (mapped === 'custom') {
+        value = mapping[`${key}_custom`] || '';
+      } else if (mapped) {
+        value = fieldMap[mapped] || contact[mapped] || '';
       } else {
-        value = fieldMap[mapping] || contact[mapping] || '';
+        // Default {{1}}→name, {{2}}→company, {{3}}→phone, {{4}}→email
+        const defaults = { '1': 'name', '2': 'company', '3': 'phone', '4': 'email' };
+        const field = defaults[key];
+        value = field ? fieldMap[field] || '' : '';
       }
-      return { type: 'text', text: String(value) };
+      return { type: 'text', text: sanitizeTemplateParam(value) };
     });
-
-    if (parameters.length > 0) {
-      components.push({ type: 'body', parameters });
-    }
+    components.push({ type: 'body', parameters });
   }
 
   return components;
@@ -321,6 +391,38 @@ async function sendCampaign(campaignId) {
     const publicBase = resolvePublicBaseUrl(publicBaseSetting, null);
     const templateWithBase = { ...template, public_base_url: publicBase };
     const token = await getSetting('whatsapp_token');
+
+    // Align send shape with the approved Meta template (prevents #132018).
+    let metaHeaderFormat = null;
+    let metaLanguage = template.language || 'en';
+    let bodyVarKeys = detectBodyVarKeys(template);
+    try {
+      const { getMetaTemplateStatus } = require('./meta');
+      const metaInfo = await getMetaTemplateStatus(
+        template.whatsapp_template_name,
+        template.language
+      );
+      if (!metaInfo.notFound) {
+        metaHeaderFormat = metaInfo.headerFormat || null;
+        if (metaInfo.metaLanguage) metaLanguage = metaInfo.metaLanguage;
+        if (Array.isArray(metaInfo.bodyVarKeys) && metaInfo.bodyVarKeys.length > 0) {
+          bodyVarKeys = metaInfo.bodyVarKeys;
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `Could not fetch Meta template shape for ${template.whatsapp_template_name}: ${err.message}`
+      );
+    }
+
+    const metaForbidsImage =
+      metaHeaderFormat &&
+      ['TEXT', 'DOCUMENT', 'VIDEO', 'LOCATION', 'NONE'].includes(
+        String(metaHeaderFormat).toUpperCase()
+      );
+    const needsImageHeader =
+      String(metaHeaderFormat || '').toUpperCase() === 'IMAGE' ||
+      (!metaHeaderFormat && template.header_type === 'image');
 
     const delay = parseInt(await getSetting('send_delay_ms'), 10) || 1000;
     const variableMapping = campaign.variable_mapping || {};
@@ -365,53 +467,53 @@ async function sendCampaign(campaignId) {
       const phoneNumberId = await resolvePhoneNumberId(contact.phone, campaign);
 
       let headerParameter = null;
-      try {
-        headerParameter = await resolveHeaderImageParameter(
-          templateWithBase,
-          sanitizePhoneNumberId(phoneNumberId) ||
-            sanitizePhoneNumberId(await getSetting('phone_number_id')),
-          token
-        );
-      } catch (err) {
-        await pool.query(
-          `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
-          [err.message, log.id]
-        );
-        await pool.query(
-          'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
-          [campaignId]
-        );
-        continue;
-      }
+      if (needsImageHeader && !metaForbidsImage) {
+        try {
+          headerParameter = await resolveHeaderImageParameter(
+            templateWithBase,
+            sanitizePhoneNumberId(phoneNumberId) ||
+              sanitizePhoneNumberId(await getSetting('phone_number_id')),
+            token
+          );
+        } catch (err) {
+          await pool.query(
+            `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
+            [err.message, log.id]
+          );
+          await pool.query(
+            'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
+            [campaignId]
+          );
+          continue;
+        }
 
-      if (
-        templateWithBase.header_type === 'image' &&
-        !headerParameter
-      ) {
-        await pool.query(
-          `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
-          [
-            'Image header template sent without an image parameter. Re-upload the logo and set Public App URL.',
-            log.id,
-          ]
-        );
-        await pool.query(
-          'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
-          [campaignId]
-        );
-        continue;
+        if (!headerParameter) {
+          await pool.query(
+            `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
+            [
+              'Image header template sent without an image parameter. Re-upload the logo and set Public App URL.',
+              log.id,
+            ]
+          );
+          await pool.query(
+            'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
+            [campaignId]
+          );
+          continue;
+        }
       }
 
       const components = buildComponents(
         variableMapping,
         contact,
         templateWithBase,
-        headerParameter
+        headerParameter,
+        { metaHeaderFormat, bodyVarKeys }
       );
       const result = await sendWhatsAppMessage(
         contact.phone,
         template.whatsapp_template_name,
-        template.language || 'en',
+        metaLanguage,
         components,
         phoneNumberId
       );
@@ -512,6 +614,8 @@ module.exports = {
   getSetting,
   seedSettingsFromEnv,
   buildComponents,
+  detectBodyVarKeys,
+  sanitizeTemplateParam,
   getPublicImageUrl,
   resolveHeaderImageParameter,
   isUnusableImageUrl,

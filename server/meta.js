@@ -322,12 +322,12 @@ function readHeaderImageFromDisk(headerImagePath) {
   return { buffer, mime, fileName: path.basename(filePath) };
 }
 
-async function ensureTemplateHeaderHandle(template) {
+async function ensureTemplateHeaderHandle(template, { forceReupload = false } = {}) {
   if (template.header_type !== 'image') {
     return { template, uploaded: false };
   }
 
-  if (template.header_media_handle) {
+  if (template.header_media_handle && !forceReupload) {
     return { template, uploaded: false };
   }
 
@@ -344,23 +344,21 @@ async function ensureTemplateHeaderHandle(template) {
   };
 }
 
-async function createMetaTemplate(template) {
-  const { token, wabaId } = await getMetaCredentials();
-
-  if (!token || !wabaId) {
-    throw new Error(
-      'WhatsApp token and WhatsApp Business Account ID (WABA ID) must be configured in Settings'
-    );
+function nextMetaTemplateName(name) {
+  const base = String(name || 'template')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 500);
+  const match = base.match(/^(.*)_v(\d+)$/);
+  if (match) {
+    return `${match[1]}_v${parseInt(match[2], 10) + 1}`.slice(0, 512);
   }
+  return `${base}_v2`.slice(0, 512);
+}
 
-  const { template: prepared } = await ensureTemplateHeaderHandle(template);
-
-  if (prepared.header_type === 'image' && !prepared.header_media_handle) {
-    throw new Error(
-      'Template image header could not be uploaded to Meta. Check Meta App ID and token permissions in Settings.'
-    );
-  }
-
+async function postMetaTemplate(token, wabaId, prepared) {
   const payload = {
     name: prepared.whatsapp_template_name,
     language: prepared.language || 'en',
@@ -380,7 +378,74 @@ async function createMetaTemplate(template) {
     metaTemplateId: response.data.id,
     metaStatus: mapMetaApiStatus(response.data.status || 'PENDING'),
     headerMediaHandle: prepared.header_media_handle || null,
+    whatsappTemplateName: prepared.whatsapp_template_name,
   };
+}
+
+function isMetaNameConflictError(err) {
+  const msg = err.response?.data?.error?.message || err.message || '';
+  const code = err.response?.data?.error?.code;
+  const subcode = err.response?.data?.error?.error_subcode;
+  return (
+    /already exists|duplicate|taken|in use|name.*exist/i.test(msg) ||
+    subcode === 2388024 ||
+    (code === 100 && /name|exist|duplicate/i.test(msg))
+  );
+}
+
+/**
+ * Create a message template on Meta.
+ * Meta cannot edit approved templates in place — use forceNewVersion (or automatic
+ * name-conflict retry) to submit under name_v2 / name_v3 / …
+ */
+async function createMetaTemplate(
+  template,
+  { forceReuploadHeader = false, forceNewVersion = false } = {}
+) {
+  const { token, wabaId } = await getMetaCredentials();
+
+  if (!token || !wabaId) {
+    throw new Error(
+      'WhatsApp token and WhatsApp Business Account ID (WABA ID) must be configured in Settings'
+    );
+  }
+
+  let working = { ...template };
+  if (forceNewVersion) {
+    working = {
+      ...working,
+      whatsapp_template_name: nextMetaTemplateName(working.whatsapp_template_name),
+      header_media_handle: null,
+    };
+    forceReuploadHeader = true;
+  }
+
+  const { template: prepared } = await ensureTemplateHeaderHandle(working, {
+    forceReupload: forceReuploadHeader,
+  });
+
+  if (prepared.header_type === 'image' && !prepared.header_media_handle) {
+    throw new Error(
+      'Template image header could not be uploaded to Meta. Check Meta App ID and token permissions in Settings.'
+    );
+  }
+
+  try {
+    return await postMetaTemplate(token, wabaId, prepared);
+  } catch (err) {
+    if (!isMetaNameConflictError(err)) throw err;
+
+    // Name already on Meta — bump version and submit as a new template.
+    const renamed = {
+      ...prepared,
+      whatsapp_template_name: nextMetaTemplateName(prepared.whatsapp_template_name),
+      header_media_handle: null,
+    };
+    const { template: prepared2 } = await ensureTemplateHeaderHandle(renamed, {
+      forceReupload: true,
+    });
+    return await postMetaTemplate(token, wabaId, prepared2);
+  }
 }
 
 async function getMetaTemplateStatus(templateName, language) {
@@ -399,7 +464,15 @@ async function getMetaTemplateStatus(templateName, language) {
 
   const templates = response.data?.data || [];
   if (templates.length === 0) {
-    return { notFound: true, status: null, metaTemplateId: null, rejectionReason: null };
+    return {
+      notFound: true,
+      status: null,
+      metaTemplateId: null,
+      rejectionReason: null,
+      headerFormat: null,
+      bodyVarKeys: [],
+      metaLanguage: null,
+    };
   }
 
   let match = templates[0];
@@ -408,12 +481,25 @@ async function getMetaTemplateStatus(templateName, language) {
     if (byLanguage) match = byLanguage;
   }
 
+  const components = match.components || [];
+  const header = components.find((c) => String(c.type).toUpperCase() === 'HEADER');
+  const body = components.find((c) => String(c.type).toUpperCase() === 'BODY');
+  const bodyVarKeys = [
+    ...new Set(
+      String(body?.text || '')
+        .match(/\{\{(\d+)\}\}/g)
+        ?.map((m) => m.replace(/[{}]/g, '')) || []
+    ),
+  ].sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+
   return {
     notFound: false,
     status: mapMetaApiStatus(match.status),
     metaLanguage: match.language || null,
     metaTemplateId: match.id,
     rejectionReason: match.rejected_reason || null,
+    headerFormat: header?.format ? String(header.format).toUpperCase() : null,
+    bodyVarKeys,
   };
 }
 
@@ -658,6 +744,7 @@ module.exports = {
   uploadImageToMeta,
   ensureTemplateHeaderHandle,
   createMetaTemplate,
+  nextMetaTemplateName,
   getMetaTemplateStatus,
   listMetaTemplates,
   parseMetaTemplateToLocal,
