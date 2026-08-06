@@ -19,6 +19,7 @@ import ErrorCell from '../components/shared/ErrorCell';
 import { campaigns, downloadBlob } from '../lib/api';
 import { usePolling } from '../hooks/usePolling';
 import { useNotifications } from '../context/NotificationContext';
+import { formatApiError, formatUserFacingError } from '../lib/formatError';
 
 function StatusIcon({ status }) {
   switch (status) {
@@ -190,7 +191,7 @@ export default function CampaignDetail() {
       notify.success('Retry started', 'Failed messages are being resent now');
       navigate(`/campaigns/${res.data.id}`);
     } catch (err) {
-      notify.error('Resend failed', err.response?.data?.error || 'No failed messages to resend');
+      notify.error('Resend failed', formatApiError(err, 'No failed messages to resend'));
     } finally {
       setResending(false);
     }
@@ -206,7 +207,7 @@ export default function CampaignDetail() {
       await fetchProgress();
       await fetchLogs();
     } catch (err) {
-      notify.error('Send failed', err.response?.data?.error || 'Could not start send');
+      notify.error('Send failed', formatApiError(err, 'Could not start send'));
     } finally {
       setSending(false);
     }
@@ -378,7 +379,10 @@ export default function CampaignDetail() {
                   <td className="px-4 py-3 font-mono text-xs">{log.contact_phone}</td>
                   <td className="px-4 py-3">{log.company || '-'}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5" title={log.error_message || ''}>
+                    <div
+                      className="flex items-center gap-1.5"
+                      title={log.error_message ? formatUserFacingError(log.error_message) : ''}
+                    >
                       <StatusIcon status={log.status} />
                       <span className="capitalize">{log.status}</span>
                     </div>

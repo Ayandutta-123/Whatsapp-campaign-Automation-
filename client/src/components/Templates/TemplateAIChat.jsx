@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, X, Sparkles, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ai } from '../../lib/api';
+import { formatApiError } from '../../lib/formatError';
 
 const SUGGESTIONS = [
   'Draft a marketing offer template with {{1}} name and a Shop Now URL button',
@@ -46,8 +47,7 @@ export default function TemplateAIChat({ onUseTemplate }) {
       setMessages((prev) => [...prev, { role: 'assistant', content: res.data.reply }]);
       if (res.data.template) setLastTemplate(res.data.template);
     } catch (err) {
-      const msg = err.response?.data?.error || 'Claude request failed';
-      toast.error(msg);
+      toast.error(formatApiError(err, 'Claude request failed'));
       setMessages((prev) => [
         ...prev,
         {

@@ -28,7 +28,7 @@ export default function WhatsAppPreview({ template, businessName = 'WhatsApp Cam
   };
 
   return (
-    <div className="mx-auto w-[280px]">
+    <div className="mx-auto w-full max-w-[280px] sm:max-w-[300px]">
       <div className="rounded-[2rem] border-4 border-gray-800 overflow-hidden shadow-xl bg-gray-800">
         <div className="bg-gray-800 px-4 py-2">
           <div className="w-20 h-1 bg-gray-600 rounded-full mx-auto" />

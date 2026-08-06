@@ -29,17 +29,13 @@ async function getMissingMetaUploadConfig() {
 }
 
 function formatMetaUploadWarning(err) {
-  const msg = err?.response?.data?.error?.message || err?.message || 'Unknown error';
-  const lower = msg.toLowerCase();
-
-  if (lower.includes('whatsapp token') || lower.includes('access token')) {
-    return `Image saved on server. Meta upload failed: fix WhatsApp Access Token in Settings, save, then re-upload.`;
+  const { formatMetaApiError } = require('./utils/userErrors');
+  const friendly = formatMetaApiError(err, 'Image saved on server, but Meta upload failed.');
+  // Keep leading context so users know the file is local even if Meta rejected it.
+  if (friendly.startsWith('[Error')) {
+    return `Image saved on server.\n${friendly}`;
   }
-  if (lower.includes('app id') || lower.includes('object with id')) {
-    return `Image saved on server. Meta upload failed: Meta App ID is wrong or doesn't match your token. In Settings, set Meta App ID from developers.facebook.com → your app → Settings → Basic (same app that created the token). Optional: add Meta App Secret so we can auto-detect it.`;
-  }
-
-  return `Image saved on server. Meta upload failed: ${msg.slice(0, 180)}. Check Settings → WhatsApp API, then re-upload.`;
+  return `Image saved on server. ${friendly}`;
 }
 
 async function discoverAppIdFromToken(token, appSecret, configuredAppId) {
@@ -192,7 +188,12 @@ function buildMetaComponents(template) {
       format: 'TEXT',
       text: template.header_value,
     });
-  } else if (template.header_type === 'image' && template.header_media_handle) {
+  } else if (template.header_type === 'image') {
+    if (!template.header_media_handle) {
+      throw new Error(
+        'Image header is missing a Meta media handle. Re-upload the PNG/JPG header image, then submit to Meta again.'
+      );
+    }
     components.push({
       type: 'HEADER',
       format: 'IMAGE',

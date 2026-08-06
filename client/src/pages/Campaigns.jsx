@@ -10,6 +10,7 @@ import CampaignTable from '../components/Campaigns/CampaignTable';
 import CreateCampaignWizard from '../components/Campaigns/CreateCampaignWizard';
 import { campaigns as campaignsApi } from '../lib/api';
 import { usePolling } from '../hooks/usePolling';
+import { formatApiError } from '../lib/formatError';
 
 export default function CampaignsPage() {
   const [list, setList] = useState([]);
@@ -53,7 +54,7 @@ export default function CampaignsPage() {
       toast.success('Campaign started!');
       navigate(`/campaigns/${id}`);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to send');
+      toast.error(formatApiError(err, 'Failed to send'));
     } finally {
       setSendingId(null);
     }

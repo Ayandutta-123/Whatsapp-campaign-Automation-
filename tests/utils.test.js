@@ -254,3 +254,40 @@ describe('sender prefix matching', () => {
     assert.strictEqual(match.phone_number_id, 'in');
   });
 });
+
+describe('user-facing Meta errors', () => {
+  const {
+    formatUserFacingError,
+    extractErrorCode,
+  } = require('../server/utils/userErrors');
+
+  it('maps 132018 to plain language with code', () => {
+    const msg = formatUserFacingError({
+      code: 132018,
+      message: "(#132018) There's an issue with the parameters in your template",
+    });
+    assert.match(msg, /\[Error 132018\]/);
+    assert.match(msg, /Why:/);
+    assert.match(msg, /What to do:/);
+    assert.doesNotMatch(msg, /Graph API/i);
+  });
+
+  it('maps 131026 undeliverable', () => {
+    const msg = formatUserFacingError({ code: 131026, message: 'Message undeliverable' });
+    assert.match(msg, /could not be delivered/i);
+    assert.match(msg, /WhatsApp/i);
+  });
+
+  it('extracts code from legacy strings', () => {
+    assert.strictEqual(
+      extractErrorCode("(#132018) There's an issue with the parameters"),
+      132018
+    );
+  });
+
+  it('leaves already-formatted messages alone', () => {
+    const original =
+      '[Error 190] Access token expired or invalid\nWhy: x\nWhat to do: y';
+    assert.strictEqual(formatUserFacingError(original), original);
+  });
+});

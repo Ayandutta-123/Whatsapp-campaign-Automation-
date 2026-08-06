@@ -11,6 +11,7 @@ import {
   setStoredCountryCode,
 } from '../../lib/countryCodes';
 import { formatPhoneHint } from '../../lib/phoneUtils';
+import { formatApiError } from '../../lib/formatError';
 
 const COLUMN_OPTIONS = ['Name', 'Phone', 'Company', 'Email', 'Tags', 'Skip'];
 
@@ -122,7 +123,7 @@ export default function ImportModal({ open, onClose, onImported }) {
       };
       reader.readAsArrayBuffer(file);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Import failed');
+      toast.error(formatApiError(err, 'Import failed'));
       setStep(1);
     } finally {
       setLoading(false);

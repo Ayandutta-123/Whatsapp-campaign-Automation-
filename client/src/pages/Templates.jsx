@@ -11,6 +11,7 @@ import TemplateAIChat from '../components/Templates/TemplateAIChat';
 import WhatsAppPreview from '../components/Templates/WhatsAppPreview';
 import Modal from '../components/shared/Modal';
 import { templates, contacts, settings } from '../lib/api';
+import { formatApiError } from '../lib/formatError';
 
 export default function TemplatesPage() {
   const [list, setList] = useState([]);
@@ -125,7 +126,7 @@ export default function TemplatesPage() {
       }
       await fetchTemplates();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Sync from Meta failed');
+      toast.error(formatApiError(err, 'Sync from Meta failed'));
     } finally {
       setSyncingAll(false);
     }
@@ -142,7 +143,7 @@ export default function TemplatesPage() {
       }
       fetchTemplates();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Sync failed');
+      toast.error(formatApiError(err, 'Sync failed'));
     } finally {
       setSyncingId(null);
     }
@@ -212,7 +213,7 @@ export default function TemplatesPage() {
           actionLabel={syncingAll ? 'Syncing…' : 'Sync from Meta'}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
           {list.map((t) => (
             <TemplateCard
               key={t.id}

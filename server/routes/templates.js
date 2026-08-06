@@ -17,6 +17,7 @@ const { resolvePublicBaseUrl } = require('../utils/publicUrl');
 const { resolveHeadersDir } = require('../utils/paths');
 const { uploadLimiter } = require('../middleware/rateLimit');
 const { publicError } = require('../utils/security');
+const { formatMetaApiError } = require('../utils/userErrors');
 
 const router = express.Router();
 
@@ -275,7 +276,7 @@ router.post('/', async (req, res) => {
         template = updateRes.rows[0];
       } catch (err) {
         metaError =
-          err.response?.data?.error?.message || err.message || 'Meta submission failed';
+          formatMetaApiError(err, 'Meta submission failed');
         await pool.query(
           `UPDATE templates SET meta_status = 'failed', meta_rejection_reason = $1, updated_at = NOW()
            WHERE id = $2`,
@@ -318,7 +319,7 @@ router.post('/sync-all-meta', async (req, res) => {
           whatsapp_template_name: template.whatsapp_template_name,
           meta_status: template.meta_status,
           synced: false,
-          error: err.response?.data?.error?.message || err.message,
+          error: formatMetaApiError(err),
         });
       }
     }
@@ -342,7 +343,7 @@ router.post('/sync-all-meta', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({
-      error: err.response?.data?.error?.message || err.message,
+      error: formatMetaApiError(err),
     });
   }
 });
@@ -357,7 +358,7 @@ router.post('/import-meta', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({
-      error: err.response?.data?.error?.message || err.message,
+      error: formatMetaApiError(err),
     });
   }
 });
@@ -411,7 +412,7 @@ router.post('/:id/submit-meta', async (req, res) => {
           : null,
     });
   } catch (err) {
-    const errorMsg = err.response?.data?.error?.message || err.message;
+    const errorMsg = formatMetaApiError(err, 'Meta submission failed');
     await pool.query(
       `UPDATE templates SET meta_status = 'failed', meta_rejection_reason = $1, updated_at = NOW()
        WHERE id = $2`,
@@ -438,7 +439,7 @@ router.post('/:id/sync-meta', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({
-      error: err.response?.data?.error?.message || err.message,
+      error: formatMetaApiError(err),
     });
   }
 });

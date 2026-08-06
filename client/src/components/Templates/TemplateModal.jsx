@@ -8,6 +8,7 @@ import StatusBadge from '../shared/StatusBadge';
 import WhatsAppPreview from './WhatsAppPreview';
 import { templates } from '../../lib/api';
 import { isApprovedTemplate } from '../../lib/templateStatus';
+import { formatApiError, formatUserFacingError } from '../../lib/formatError';
 
 const META_RESUBMIT_WARNING = `Meta cannot update an approved template in place.
 
@@ -181,7 +182,7 @@ export default function TemplateModal({
         toast.success('Image uploaded successfully');
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Image upload failed');
+      toast.error(formatApiError(err, 'Image upload failed'));
     } finally {
       setUploading(false);
     }
@@ -199,7 +200,7 @@ export default function TemplateModal({
       }
       onSaved();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Sync failed');
+      toast.error(formatApiError(err, 'Sync failed'));
     } finally {
       setSyncing(false);
     }
@@ -250,7 +251,7 @@ export default function TemplateModal({
       }
       onSaved();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Meta submission failed');
+      toast.error(formatApiError(err, 'Meta submission failed'));
     } finally {
       setLoading(false);
     }
@@ -311,7 +312,10 @@ export default function TemplateModal({
       } else {
         const res = await templates.create(data);
         if (res.data.metaError) {
-          toast.error(`Saved locally but Meta error: ${res.data.metaError}`);
+          toast.error(
+            `Saved locally, but Meta rejected it:\n${formatUserFacingError(res.data.metaError)}`,
+            { duration: 8000 }
+          );
         } else if (form.submit_to_meta) {
           toast.success('Template saved and submitted to Meta for approval');
         } else {
@@ -321,7 +325,7 @@ export default function TemplateModal({
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save template');
+      toast.error(formatApiError(err, 'Failed to save template'));
     } finally {
       setLoading(false);
     }
@@ -370,7 +374,7 @@ export default function TemplateModal({
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 xl:gap-10">
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Template Name</label>
@@ -485,16 +489,32 @@ export default function TemplateModal({
                 />
               )}
               {form.header_type === 'image' && (
-                <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                <div className="border-2 border-dashed border-accent/40 rounded-xl p-4 sm:p-5 text-center bg-accent/5">
                   {form.header_image_preview ? (
-                    <img src={form.header_image_preview} alt="Header" className="mx-auto h-24 object-contain mb-2" />
+                    <img
+                      src={form.header_image_preview}
+                      alt="Header"
+                      className="mx-auto h-24 sm:h-28 max-w-full object-contain mb-3 rounded-lg"
+                    />
                   ) : null}
-                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
+                  <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent/90 w-full sm:w-auto">
                     <Upload size={16} />
                     {uploading ? 'Uploading...' : 'Upload Logo / Image'}
                     <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={handleImageUpload} disabled={uploading} />
                   </label>
-                  <p className="text-xs text-gray-400 mt-2">PNG or JPG, max 5MB</p>
+                  <p className="text-xs text-gray-500 mt-2">PNG or JPG, max 5MB — used for Meta approval and customer sends</p>
+                  {form.header_image_path && (
+                    <p className="text-xs text-emerald-700 mt-1 font-medium">
+                      {form.header_media_handle
+                        ? 'Image ready for Meta + campaigns'
+                        : 'Image saved locally — will upload to Meta on submit (check token in Settings if submit fails)'}
+                    </p>
+                  )}
+                  {form.header_image_path && !form.header_image_url && (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Set Public App URL in Settings so WhatsApp can load this image when sending.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -506,115 +526,159 @@ export default function TemplateModal({
                 className="w-full px-3 py-2 border rounded-lg text-sm"
               />
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium">Buttons (optional, max 3)</label>
+
+            {/* Prominent action buttons for WhatsApp templates */}
+            <div className="rounded-xl border-2 border-accent/30 bg-gradient-to-b from-accent/5 to-white p-4 sm:p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
+                <div className="min-w-0">
+                  <label className="block text-base font-semibold text-gray-900">
+                    Action buttons
+                  </label>
+                  <p className="text-sm text-gray-600 mt-0.5">
+                    Add up to 3 tap actions customers see under the message (link, reply, or call).
+                  </p>
+                </div>
                 {form.buttons.length < 3 && (
                   <button
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, buttons: [...f.buttons, { ...emptyButton }] }))}
-                    className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 font-medium"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent/90 shrink-0 w-full sm:w-auto shadow-sm"
                   >
-                    <Plus size={13} /> Add Button
+                    <Plus size={16} /> Add button
                   </button>
                 )}
               </div>
-              {form.buttons.length === 0 && (
-                <p className="text-xs text-gray-400">No buttons. Click "Add Button" to add a URL link, quick reply, or call button.</p>
-              )}
-              <div className="space-y-3">
-                {form.buttons.map((btn, idx) => (
-                  <div key={idx} className="border rounded-lg p-3 bg-gray-50 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={btn.type}
-                        onChange={(e) => {
-                          const type = e.target.value;
-                          setForm((f) => ({
-                            ...f,
-                            buttons: f.buttons.map((b, i) =>
-                              i === idx ? { ...b, type } : b
-                            ),
-                          }));
-                        }}
-                        className="text-xs border rounded px-2 py-1 bg-white"
-                      >
-                        {BUTTON_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.icon} {t.label}</option>
-                        ))}
-                      </select>
+
+              {form.buttons.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-accent/40 bg-white p-4">
+                  <p className="text-sm text-gray-600 mb-3 text-center sm:text-left">
+                    No buttons yet. Pick a type to start:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {BUTTON_TYPES.map((t) => (
                       <button
+                        key={t.value}
                         type="button"
-                        onClick={() => {
+                        onClick={() =>
                           setForm((f) => ({
                             ...f,
-                            buttons: f.buttons.filter((_, i) => i !== idx),
-                          }));
-                        }}
-                        className="ml-auto text-red-400 hover:text-red-600"
+                            buttons: [...f.buttons, { ...emptyButton, type: t.value }],
+                          }))
+                        }
+                        className="flex items-center gap-2 px-3 py-3 rounded-lg border-2 border-gray-200 bg-white hover:border-accent hover:bg-accent/5 text-sm font-medium text-left transition-colors"
                       >
-                        <Trash2 size={14} />
+                        <span className="text-lg" aria-hidden>{t.icon}</span>
+                        <span>{t.label}</span>
                       </button>
-                    </div>
-                    <input
-                      placeholder="Button label (e.g. Claim Now, Stop, Call Us)"
-                      value={btn.text}
-                      maxLength={25}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        setForm((f) => ({
-                          ...f,
-                          buttons: f.buttons.map((b, i) =>
-                            i === idx ? { ...b, text } : b
-                          ),
-                        }));
-                      }}
-                      className="w-full px-2 py-1 border rounded text-xs"
-                    />
-                    {btn.type === 'URL' && (
-                      <input
-                        placeholder="URL (e.g. https://yourbrand.com/offer)"
-                        value={btn.url}
-                        onChange={(e) => {
-                          const url = e.target.value;
-                          setForm((f) => ({
-                            ...f,
-                            buttons: f.buttons.map((b, i) =>
-                              i === idx ? { ...b, url } : b
-                            ),
-                          }));
-                        }}
-                        className="w-full px-2 py-1 border rounded text-xs"
-                      />
-                    )}
-                    {btn.type === 'PHONE_NUMBER' && (
-                      <input
-                        placeholder="Phone with country code (e.g. +919876543210)"
-                        value={btn.phone}
-                        onChange={(e) => {
-                          const phone = e.target.value;
-                          setForm((f) => ({
-                            ...f,
-                            buttons: f.buttons.map((b, i) =>
-                              i === idx ? { ...b, phone } : b
-                            ),
-                          }));
-                        }}
-                        className="w-full px-2 py-1 border rounded text-xs"
-                      />
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                URL = clickable link · Quick Reply = one-tap reply · Call = dial number
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {form.buttons.map((btn, idx) => (
+                    <div
+                      key={idx}
+                      className="border-2 border-gray-200 rounded-xl p-3 sm:p-4 bg-white space-y-3 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                          {BUTTON_TYPES.map((t) => (
+                            <button
+                              key={t.value}
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => ({
+                                  ...f,
+                                  buttons: f.buttons.map((b, i) =>
+                                    i === idx ? { ...b, type: t.value } : b
+                                  ),
+                                }));
+                              }}
+                              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg border font-medium transition-colors ${
+                                btn.type === t.value
+                                  ? 'bg-accent text-white border-accent'
+                                  : 'bg-white text-gray-700 border-gray-200 hover:border-accent/50'
+                              }`}
+                            >
+                              {t.icon} {t.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({
+                              ...f,
+                              buttons: f.buttons.filter((_, i) => i !== idx),
+                            }));
+                          }}
+                          className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg shrink-0"
+                        >
+                          <Trash2 size={15} /> Remove
+                        </button>
+                      </div>
+                      <input
+                        placeholder="Button label (e.g. Claim Now, Stop, Call Us)"
+                        value={btn.text}
+                        maxLength={25}
+                        onChange={(e) => {
+                          const text = e.target.value;
+                          setForm((f) => ({
+                            ...f,
+                            buttons: f.buttons.map((b, i) =>
+                              i === idx ? { ...b, text } : b
+                            ),
+                          }));
+                        }}
+                        className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none"
+                      />
+                      {btn.type === 'URL' && (
+                        <input
+                          placeholder="URL (e.g. https://yourbrand.com/offer)"
+                          value={btn.url}
+                          onChange={(e) => {
+                            const url = e.target.value;
+                            setForm((f) => ({
+                              ...f,
+                              buttons: f.buttons.map((b, i) =>
+                                i === idx ? { ...b, url } : b
+                              ),
+                            }));
+                          }}
+                          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none"
+                        />
+                      )}
+                      {btn.type === 'PHONE_NUMBER' && (
+                        <input
+                          placeholder="Phone with country code (e.g. +919876543210)"
+                          value={btn.phone}
+                          onChange={(e) => {
+                            const phone = e.target.value;
+                            setForm((f) => ({
+                              ...f,
+                              buttons: f.buttons.map((b, i) =>
+                                i === idx ? { ...b, phone } : b
+                              ),
+                            }));
+                          }}
+                          className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-3">
+                Tip: Link opens a website · Quick Reply sends a one-tap reply · Call dials a number
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center lg:sticky lg:top-4 lg:self-start">
             <p className="text-sm font-medium text-gray-500 mb-4">Live Preview</p>
-            <WhatsAppPreview template={form} businessName={businessName} />
+            <div className="w-full max-w-[300px] sm:max-w-[320px] origin-top scale-[0.92] sm:scale-100">
+              <WhatsAppPreview template={form} businessName={businessName} />
+            </div>
           </div>
         </div>
 

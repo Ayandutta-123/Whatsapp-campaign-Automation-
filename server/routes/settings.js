@@ -13,6 +13,7 @@ const {
   assertValidPhoneNumberId,
 } = require('../utils/phoneNumberId');
 const { pushNotification } = require('../utils/notifications');
+const { formatMetaApiError } = require('../utils/userErrors');
 
 const router = express.Router();
 
@@ -159,7 +160,7 @@ router.post('/test-connection', async (req, res) => {
         : null,
     });
   } catch (err) {
-    const message = err.response?.data?.error?.message || err.message;
+    const message = formatMetaApiError(err, 'Connection test failed');
     await pushNotification({
       type: 'error',
       category: 'settings',
@@ -219,10 +220,7 @@ router.post('/register-phone', async (req, res) => {
       message: 'Phone number registered for Cloud API. Retry your campaign.',
     });
   } catch (err) {
-    const message =
-      err.response?.data?.error?.error_user_msg ||
-      err.response?.data?.error?.message ||
-      err.message;
+    const message = formatMetaApiError(err, 'Phone registration failed');
     await pushNotification({
       type: 'error',
       category: 'settings',

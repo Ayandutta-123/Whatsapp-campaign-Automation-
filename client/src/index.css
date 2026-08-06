@@ -115,6 +115,21 @@ h1, h2, h3, .font-display {
 .ht-animate-in-delay-3 { animation-delay: 0.18s; }
 .ht-animate-in-delay-4 { animation-delay: 0.24s; }
 
+/* Content shell: readable on phones, laptops, and large TVs */
+.ht-page-shell {
+  width: 100%;
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
+  min-width: 0;
+}
+
+@media (min-width: 1920px) {
+  .ht-page-shell {
+    max-width: 1800px;
+  }
+}
+
 .ht-card {
   background: var(--ht-card);
   border: 1px solid rgba(15, 23, 42, 0.06);

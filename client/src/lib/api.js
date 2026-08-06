@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiBaseUrl } from './appOrigin';
+import { formatApiError, formatUserFacingError } from './formatError';
 
 // Relative /api paths — same origin in production; Vite dev server proxies to the backend.
 // VITE_API_BASE_URL overrides this when the UI and API are on different hosts.
@@ -16,6 +17,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    error.userMessage = formatApiError(error);
     if (error.response?.status === 401) {
       const requireLogin = localStorage.getItem('require_login') !== 'false';
       if (requireLogin) {
@@ -30,6 +32,7 @@ api.interceptors.response.use(
 );
 
 export default api;
+export { formatApiError, formatUserFacingError };
 
 export const auth = {
   login: (username, password) => api.post('/api/auth/login', { username, password }),

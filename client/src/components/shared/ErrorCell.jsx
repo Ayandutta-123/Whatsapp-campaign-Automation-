@@ -1,23 +1,25 @@
 import { useState } from 'react';
+import { formatUserFacingError } from '../../lib/formatError';
 
-/** Full error text with expand/collapse — never hide delivery failure reasons. */
+/** Full error text with expand/collapse — plain language + error code. */
 export default function ErrorCell({ message, maxWidthClass = 'max-w-[280px]' }) {
   const [expanded, setExpanded] = useState(false);
   if (!message) {
     return <span className="text-gray-400">-</span>;
   }
 
-  const long = message.length > 80;
+  const display = formatUserFacingError(message);
+  const long = display.length > 80 || display.includes('\n');
 
   return (
     <div className={`${maxWidthClass}`}>
       <p
         className={`text-red-600 text-xs whitespace-pre-wrap break-words ${
-          expanded || !long ? '' : 'line-clamp-2'
+          expanded || !long ? '' : 'line-clamp-3'
         }`}
-        title={message}
+        title={display}
       >
-        {message}
+        {display}
       </p>
       {long && (
         <button

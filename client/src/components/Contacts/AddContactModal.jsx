@@ -7,6 +7,7 @@ import PhoneInput from '../shared/PhoneInput';
 import { contacts } from '../../lib/api';
 import { validatePhoneParts, splitPhone, formatPhoneHint } from '../../lib/phoneUtils';
 import { getStoredCountryCode } from '../../lib/countryCodes';
+import { formatApiError } from '../../lib/formatError';
 
 export default function AddContactModal({ open, onClose, onSaved }) {
   const [form, setForm] = useState({ name: '', phone: '', company: '', email: '', tags: [] });
@@ -28,7 +29,7 @@ export default function AddContactModal({ open, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to add contact');
+      toast.error(formatApiError(err, 'Failed to add contact'));
     } finally {
       setLoading(false);
     }

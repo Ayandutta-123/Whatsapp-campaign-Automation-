@@ -5,6 +5,7 @@ const pool = require('./db');
 const { resolvePhoneNumberId } = require('./utils/senders');
 const { canSendMore } = require('./utils/limits');
 const { sanitizePhoneNumberId, enrichMetaSendError } = require('./utils/phoneNumberId');
+const { formatUserFacingError } = require('./utils/userErrors');
 const { pushNotification } = require('./utils/notifications');
 const { safeResolveUnder } = require('./utils/security');
 
@@ -99,26 +100,13 @@ async function sendWhatsAppMessage(phone, templateName, languageCode, components
   } catch (err) {
     const status = err.response?.status;
     const meta = err.response?.data?.error;
-    let raw = meta?.message || err.message || 'Unknown error';
-    if (!meta?.message && err.response?.data) {
-      try {
-        const bodyStr = JSON.stringify(err.response.data).slice(0, 500);
-        raw = `HTTP ${status}: ${bodyStr}`;
-      } catch {
-        /* keep raw as-is */
-      }
-    }
-    const details = [meta?.code && `code ${meta.code}`, meta?.error_subcode && `subcode ${meta.error_subcode}`]
-      .filter(Boolean)
-      .join(', ');
-    const withCode = details ? `${raw} [${details}]` : raw;
     console.error(
       `WhatsApp send failed (phoneNumberId=${numberId}, status=${status ?? 'n/a'}):`,
       err.response?.data ? JSON.stringify(err.response.data) : err.message
     );
     return {
       success: false,
-      error: enrichMetaSendError(withCode, numberId),
+      error: enrichMetaSendError(meta || err, numberId),
       phoneNumberId: numberId,
     };
   }
@@ -202,13 +190,23 @@ async function uploadWhatsAppMedia(buffer, mimeType, fileName, phoneNumberId, to
 /**
  * Build the header image parameter for an IMAGE template.
  * Prefers media id from a fresh upload; falls back to a public HTTPS link.
+ * forceImage: when Meta’s approved template is IMAGE but local type drifted.
  */
-async function resolveHeaderImageParameter(template, phoneNumberId, token) {
-  if (template?.header_type !== 'image') return null;
+async function resolveHeaderImageParameter(
+  template,
+  phoneNumberId,
+  token,
+  { forceImage = false } = {}
+) {
+  if (!forceImage && template?.header_type !== 'image') return null;
 
-  if (template.header_image_path) {
+  const effective = forceImage
+    ? { ...template, header_type: 'image' }
+    : template;
+
+  if (effective.header_image_path) {
     try {
-      const { buffer, mime, fileName } = readHeaderImageFile(template.header_image_path);
+      const { buffer, mime, fileName } = readHeaderImageFile(effective.header_image_path);
       const mediaId = await uploadWhatsAppMedia(
         buffer,
         mime,
@@ -219,12 +217,12 @@ async function resolveHeaderImageParameter(template, phoneNumberId, token) {
       return { type: 'image', image: { id: mediaId } };
     } catch (err) {
       console.warn(
-        `WhatsApp media upload failed for ${template.header_image_path}: ${err.message}. Falling back to public link.`
+        `WhatsApp media upload failed for ${effective.header_image_path}: ${err.message}. Falling back to public link.`
       );
     }
   }
 
-  const imageUrl = getPublicImageUrl(template);
+  const imageUrl = getPublicImageUrl(effective);
   if (imageUrl) {
     return { type: 'image', image: { link: imageUrl } };
   }
@@ -446,7 +444,9 @@ async function sendCampaign(campaignId) {
           `UPDATE message_logs SET status = 'failed',
            error_message = $1 WHERE id = $2`,
           [
-            `Daily send limit reached (${limitCheck.limit} messages/day). Remaining resumes tomorrow.`,
+            formatUserFacingError(
+              `Daily send limit reached (${limitCheck.limit} messages/day). Remaining resumes tomorrow.`
+            ),
             log.id,
           ]
         );
@@ -473,12 +473,13 @@ async function sendCampaign(campaignId) {
             templateWithBase,
             sanitizePhoneNumberId(phoneNumberId) ||
               sanitizePhoneNumberId(await getSetting('phone_number_id')),
-            token
+            token,
+            { forceImage: true }
           );
         } catch (err) {
           await pool.query(
             `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
-            [err.message, log.id]
+            [formatUserFacingError(err.message || err), log.id]
           );
           await pool.query(
             'UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = $1',
@@ -491,7 +492,9 @@ async function sendCampaign(campaignId) {
           await pool.query(
             `UPDATE message_logs SET status = 'failed', error_message = $1 WHERE id = $2`,
             [
-              'Image header template sent without an image parameter. Re-upload the logo and set Public App URL.',
+              formatUserFacingError(
+                'Image header template sent without an image parameter. Re-upload the logo and set Public App URL.'
+              ),
               log.id,
             ]
           );

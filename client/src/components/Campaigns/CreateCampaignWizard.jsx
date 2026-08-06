@@ -7,6 +7,7 @@ import StatusBadge from '../shared/StatusBadge';
 import WhatsAppPreview from '../Templates/WhatsAppPreview';
 import { campaigns, templates, contacts, senders } from '../../lib/api';
 import { getCountryLabel } from '../../lib/senderPresets';
+import { formatApiError } from '../../lib/formatError';
 
 const FIELD_OPTIONS = [
   { value: 'name', label: 'Contact Name' },
@@ -135,7 +136,7 @@ export default function CreateCampaignWizard({ open, onClose, onCreated, presele
       }
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create campaign');
+      toast.error(formatApiError(err, 'Failed to create campaign'));
     } finally {
       setLoading(false);
     }
@@ -411,7 +412,7 @@ export default function CreateCampaignWizard({ open, onClose, onCreated, presele
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               type="button"
               onClick={() => setScheduleType('now')}

@@ -87,7 +87,7 @@ export default function Dashboard() {
 
       <TopBar title="Dashboard" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <StatCard icon={Users} label="Total Contacts" value={stats?.totalContacts ?? '-'} delayClass="ht-animate-in-delay-1" />
         <StatCard
           icon={Megaphone}
@@ -110,10 +110,11 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4">Messages Sent (Last 7 Days)</h3>
-          <ResponsiveContainer width="100%" height={250}>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 mb-8">
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100 min-w-0">
+          <h3 className="text-base sm:text-lg font-semibold mb-4">Messages Sent (Last 7 Days)</h3>
+          <div className="h-[220px] sm:h-[250px] xl:h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chart}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
@@ -122,6 +123,7 @@ export default function Dashboard() {
               <Bar dataKey="count" fill="#ff6002" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

@@ -7,6 +7,7 @@ import PhoneInput from '../shared/PhoneInput';
 import { contacts } from '../../lib/api';
 import { validatePhoneParts, splitPhone, formatPhoneHint } from '../../lib/phoneUtils';
 import { getStoredCountryCode } from '../../lib/countryCodes';
+import { formatApiError } from '../../lib/formatError';
 
 export default function EditContactModal({ open, onClose, contact, onSaved }) {
   const [form, setForm] = useState({ name: '', phone: '', company: '', email: '', tags: [] });
@@ -39,7 +40,7 @@ export default function EditContactModal({ open, onClose, contact, onSaved }) {
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to update contact');
+      toast.error(formatApiError(err, 'Failed to update contact'));
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ import SavedBadge from '../components/shared/SavedBadge';
 import SenderNumbersSection from '../components/Settings/SenderNumbersSection';
 import { settings, contacts, senders, downloadBlob } from '../lib/api';
 import { getWebhookUrl } from '../lib/appOrigin';
+import { formatApiError } from '../lib/formatError';
 
 export default function SettingsPage() {
   const [data, setData] = useState({});
@@ -97,7 +98,7 @@ export default function SettingsPage() {
       toast.success(`${label || key} saved`);
       await loadSettings({ silent: true });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save');
+      toast.error(formatApiError(err, 'Failed to save'));
     } finally {
       setSaving('');
     }
@@ -126,7 +127,7 @@ export default function SettingsPage() {
       toast.success('WhatsApp API settings saved');
       await loadSettings({ silent: true });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save');
+      toast.error(formatApiError(err, 'Failed to save'));
     } finally {
       setSaving('');
     }
@@ -164,7 +165,7 @@ export default function SettingsPage() {
       const test = await settings.testConnection();
       setTestResult(test.data);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Registration failed');
+      toast.error(formatApiError(err, 'Registration failed'));
     } finally {
       setRegistering(false);
     }
@@ -226,7 +227,7 @@ export default function SettingsPage() {
       window.location.href = '/login';
       return;
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to change password');
+      toast.error(formatApiError(err, 'Failed to change password'));
     } finally {
       setPasswordSaving(false);
     }
@@ -260,7 +261,7 @@ export default function SettingsPage() {
     <div>
       <TopBar title="Settings" />
 
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6 max-w-3xl xl:max-w-5xl 2xl:max-w-6xl">
         {loadError && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-red-800">{loadError}</p>

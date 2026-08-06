@@ -23,76 +23,135 @@ export default function CampaignTable({ campaigns, onSend, onDelete, sendingId }
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-gray-500">
-          <tr>
-            <th className="text-left px-4 py-3 font-medium">Name</th>
-            <th className="text-left px-4 py-3 font-medium">Template</th>
-            <th className="text-left px-4 py-3 font-medium">Status</th>
-            <th className="text-left px-4 py-3 font-medium">Scheduled</th>
-            <th className="text-left px-4 py-3 font-medium">Progress</th>
-            <th className="text-left px-4 py-3 font-medium">Delivery</th>
-            <th className="text-left px-4 py-3 font-medium">Date</th>
-            <th className="px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {campaigns.map((c) => (
-            <tr key={c.id} className="border-t hover:bg-gray-50">
-              <td className="px-4 py-3 font-medium">{c.name}</td>
-              <td className="px-4 py-3 text-gray-500">{c.template_name || '-'}</td>
-              <td className="px-4 py-3">
-                <StatusBadge status={c.status} pulse />
-              </td>
-              <td className="px-4 py-3 text-gray-500">{formatDate(c.scheduled_at)}</td>
-              <td className="px-4 py-3 min-w-[120px]">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full transition-all"
-                      style={{ width: `${progress(c)}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {c.sent_count}/{c.total_contacts}
-                  </span>
-                </div>
-              </td>
-              <td className="px-4 py-3">{c.delivery_rate || 0}%</td>
-              <td className="px-4 py-3 text-gray-500">{formatDate(c.created_at)}</td>
-              <td className="px-4 py-3">
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => navigate(`/campaigns/${c.id}`)}
-                    className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
-                    title="View"
-                  >
-                    <Eye size={14} />
-                  </button>
-                  {(c.status === 'draft' || c.status === 'scheduled') && (
-                    <LoadingButton
-                      variant="outline"
-                      onClick={() => onSend(c.id)}
-                      loading={sendingId === c.id}
-                      className="!px-2 !py-1"
-                    >
-                      <Send size={14} />
-                    </LoadingButton>
-                  )}
-                  <button
-                    onClick={() => onDelete(c)}
-                    className="p-1.5 rounded hover:bg-red-50 text-red-500"
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </td>
+    <>
+      {/* Mobile / tablet cards */}
+      <div className="md:hidden space-y-3">
+        {campaigns.map((c) => (
+          <div key={c.id} className="ht-card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-900 truncate">{c.name}</p>
+                <p className="text-sm text-gray-500 truncate">{c.template_name || 'No template'}</p>
+              </div>
+              <StatusBadge status={c.status} pulse />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent rounded-full transition-all"
+                  style={{ width: `${progress(c)}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                {c.sent_count}/{c.total_contacts}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+              <span>Delivery {c.delivery_rate || 0}%</span>
+              <span>·</span>
+              <span>{formatDate(c.created_at)}</span>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                onClick={() => navigate(`/campaigns/${c.id}`)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50"
+              >
+                <Eye size={14} /> View
+              </button>
+              {(c.status === 'draft' || c.status === 'scheduled') && (
+                <LoadingButton
+                  variant="outline"
+                  onClick={() => onSend(c.id)}
+                  loading={sendingId === c.id}
+                  className="flex-1 justify-center"
+                >
+                  <Send size={14} /> Send
+                </LoadingButton>
+              )}
+              <button
+                onClick={() => onDelete(c)}
+                className="inline-flex items-center justify-center px-3 py-2.5 rounded-lg border border-red-100 text-red-600 hover:bg-red-50"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop / TV table */}
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-100 bg-white">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium">Name</th>
+              <th className="text-left px-4 py-3 font-medium">Template</th>
+              <th className="text-left px-4 py-3 font-medium">Status</th>
+              <th className="text-left px-4 py-3 font-medium">Scheduled</th>
+              <th className="text-left px-4 py-3 font-medium">Progress</th>
+              <th className="text-left px-4 py-3 font-medium">Delivery</th>
+              <th className="text-left px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {campaigns.map((c) => (
+              <tr key={c.id} className="border-t hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium">{c.name}</td>
+                <td className="px-4 py-3 text-gray-500">{c.template_name || '-'}</td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={c.status} pulse />
+                </td>
+                <td className="px-4 py-3 text-gray-500">{formatDate(c.scheduled_at)}</td>
+                <td className="px-4 py-3 min-w-[120px]">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent rounded-full transition-all"
+                        style={{ width: `${progress(c)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      {c.sent_count}/{c.total_contacts}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3">{c.delivery_rate || 0}%</td>
+                <td className="px-4 py-3 text-gray-500">{formatDate(c.created_at)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => navigate(`/campaigns/${c.id}`)}
+                      className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                      title="View"
+                    >
+                      <Eye size={14} />
+                    </button>
+                    {(c.status === 'draft' || c.status === 'scheduled') && (
+                      <LoadingButton
+                        variant="outline"
+                        onClick={() => onSend(c.id)}
+                        loading={sendingId === c.id}
+                        className="!px-2 !py-1"
+                      >
+                        <Send size={14} />
+                      </LoadingButton>
+                    )}
+                    <button
+                      onClick={() => onDelete(c)}
+                      className="p-1.5 rounded hover:bg-red-50 text-red-500"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

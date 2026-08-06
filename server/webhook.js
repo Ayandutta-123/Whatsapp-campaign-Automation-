@@ -3,19 +3,29 @@ const pool = require('./db');
 const { getSetting } = require('./whatsapp');
 const { verifyMetaSignature } = require('./utils/security');
 const { pushNotification } = require('./utils/notifications');
+const { formatUserFacingError } = require('./utils/userErrors');
 
 const router = express.Router();
 
 function formatWebhookDeliveryError(status) {
   const err = status?.errors?.[0];
-  if (!err) return 'Delivery failed (Meta webhook)';
-  const parts = [
-    err.title,
-    err.message,
-    err.error_data?.details,
-    err.code != null ? `code ${err.code}` : null,
-  ].filter(Boolean);
-  return parts.join(' — ') || 'Delivery failed (Meta webhook)';
+  if (!err) {
+    return formatUserFacingError(null, {
+      fallback:
+        '[Error] Delivery failed\nWhy: WhatsApp could not deliver this message.\nWhat to do: Check the phone number and Resend Failed.',
+    });
+  }
+  return formatUserFacingError(
+    {
+      code: err.code,
+      message: err.message || err.title,
+      error_user_msg: err.error_data?.details || err.title,
+      error_data: err.error_data,
+    },
+    {
+      fallback: 'Delivery failed. Check the contact number and try Resend Failed.',
+    }
+  );
 }
 
 router.get('/', async (req, res) => {

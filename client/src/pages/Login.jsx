@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MessageSquare, Loader2, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { formatApiError } from '../lib/formatError';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -27,10 +28,9 @@ export default function Login() {
       navigate('/dashboard');
     } catch (err) {
       const msg =
-        err.response?.data?.error ||
-        (err.message === 'Network Error'
-          ? 'Cannot reach server — check that the backend is running'
-          : 'Invalid username or password');
+        err.message === 'Network Error'
+          ? 'Cannot reach the server. Check that the app backend is running, then try again.'
+          : formatApiError(err, 'Invalid username or password');
       toast.error(msg);
     } finally {
       setLoading(false);

@@ -5,6 +5,7 @@ import LoadingButton from '../shared/LoadingButton';
 import { senders } from '../../lib/api';
 import { COUNTRY_CODES } from '../../lib/countryCodes';
 import { SENDER_PRESETS, getCountryLabel } from '../../lib/senderPresets';
+import { formatApiError } from '../../lib/formatError';
 
 const emptyForm = {
   label: '',
@@ -59,7 +60,7 @@ export default function SenderNumbersSection({ senderList, onRefresh, wabaId }) 
       setForm(emptyForm);
       onRefresh();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to add sender');
+      toast.error(formatApiError(err, 'Failed to add sender'));
     } finally {
       setSaving(false);
     }

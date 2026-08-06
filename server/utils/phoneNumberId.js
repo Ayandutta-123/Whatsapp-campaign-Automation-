@@ -1,3 +1,5 @@
+const { formatUserFacingError } = require('./userErrors');
+
 /**
  * Meta Cloud API Phone Number IDs are numeric Graph object IDs (no spaces).
  * Display phone numbers like "81067 77004" must never be used as phone_number_id.
@@ -36,23 +38,10 @@ function assertValidPhoneNumberId(value, { fieldLabel = 'Phone Number ID' } = {}
 }
 
 function enrichMetaSendError(message, phoneNumberId) {
-  const msg = String(message || 'Unknown error');
-  const lower = msg.toLowerCase();
-  const idHint = phoneNumberId ? ` (used Phone Number ID: ${phoneNumberId})` : '';
-
-  if (
-    lower.includes('does not exist') ||
-    lower.includes('unsupported post request') ||
-    lower.includes('missing permissions')
-  ) {
-    return `${msg}${idHint}. Fix: Settings → WhatsApp API / Sender Numbers — set the Meta Phone Number ID (long digits from API Setup), not the display phone number. Then Resend Failed.`;
-  }
-
-  if (lower.includes('account not registered') || lower.includes('133010')) {
-    return `${msg}${idHint}. Your number is in Meta but not registered for Cloud API messaging. In Settings click “Register Phone for Cloud API”, enter any 6-digit PIN, then Resend Failed.`;
-  }
-
-  return `${msg}${idHint}`;
+  return formatUserFacingError(message, {
+    phoneNumberId,
+    fallback: 'Message could not be sent. Check Settings and try again.',
+  });
 }
 
 module.exports = {
